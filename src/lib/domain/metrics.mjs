@@ -141,10 +141,10 @@ export function computeMetrics(db, { windowDays = 90 } = {}) {
     windowDays,
     generatedAt: new Date().toISOString(),
     totals: {
-      users: totalUsers,
-      works: db.prepare("SELECT COUNT(*) AS n FROM works").get().n,
-      sightings: db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n,
-      venues: db.prepare("SELECT COUNT(*) AS n FROM venues").get().n,
+      users: Number(totalUsers),
+      works: Number(db.prepare("SELECT COUNT(*) AS n FROM works").get().n),
+      sightings: Number(db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n),
+      venues: Number(db.prepare("SELECT COUNT(*) AS n FROM venues").get().n),
       activeUsers: activeUserIds.length,
     },
     v0: {
@@ -160,12 +160,11 @@ export function computeMetrics(db, { windowDays = 90 } = {}) {
     },
     guardrail: {
       recognitionAccuracy: share(recognition.top_accepted ?? 0, recognition.total),
-      recognitionSample: recognition.total,
+      recognitionSample: Number(recognition.total),
     },
   };
 
-  metrics.verdict = verdict(metrics);
-  return metrics;
+  return { ...metrics, verdict: verdict(metrics) };
 }
 
 /** Gate arithmetic, kept separate so tests can drive it with fixed numbers. */

@@ -174,7 +174,7 @@ export async function createListAction(formData: FormData) {
     userId: user.id,
     title,
     description: String(formData.get("description") ?? ""),
-    isPublic: formData.get("is_public") !== "off",
+    isPublic: formData.get("is_public") === "on",
     isRanked: formData.get("is_ranked") === "on",
   });
   const workId = Number(formData.get("work_id"));

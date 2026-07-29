@@ -19,6 +19,10 @@
 import { openDb } from "../lib/db.mjs";
 import { scoreCandidate, AUTO_ACCEPT, REVIEW_FLOOR } from "../../src/lib/text.mjs";
 import { wikidataProvider, fixtureProvider } from "./wikidata.mjs";
+import {
+  acceptCandidate,
+  rejectCandidate,
+} from "../../src/lib/domain/reconciliation.mjs";
 
 function parseArgs(argv) {
   const args = { limit: 500, collection: "Q160236" };
@@ -162,50 +166,6 @@ function showQueue(db) {
     );
   }
   console.log("\naccept with: node scripts/ingest/reconcile.mjs --accept <id>");
-}
-
-export function acceptCandidate(db, candidateId) {
-  const candidate = db
-    .prepare("SELECT * FROM reconciliation_candidates WHERE id = ?")
-    .get(candidateId);
-  if (!candidate) throw new Error(`no candidate ${candidateId}`);
-  db.prepare(
-    `UPDATE works SET wikidata_qid = ?, catalogue_status = 'reviewed',
-                      updated_at = datetime('now')
-      WHERE id = ?`,
-  ).run(candidate.qid, candidate.work_id);
-  db.prepare(
-    "INSERT OR IGNORE INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', ?)",
-  ).run(candidate.work_id, candidate.qid);
-  db.prepare(
-    "UPDATE reconciliation_candidates SET status = 'accepted' WHERE id = ?",
-  ).run(candidateId);
-  // Every sibling candidate for that work is now rejected by implication.
-  db.prepare(
-    `UPDATE reconciliation_candidates SET status = 'rejected'
-      WHERE work_id = ? AND id <> ? AND status = 'pending'`,
-  ).run(candidate.work_id, candidateId);
-  return candidate;
-}
-
-export function rejectCandidate(db, candidateId) {
-  db.prepare(
-    "UPDATE reconciliation_candidates SET status = 'rejected' WHERE id = ?",
-  ).run(candidateId);
-  const candidate = db
-    .prepare("SELECT work_id FROM reconciliation_candidates WHERE id = ?")
-    .get(candidateId);
-  if (!candidate) return;
-  const remaining = db
-    .prepare(
-      "SELECT COUNT(*) AS n FROM reconciliation_candidates WHERE work_id = ? AND status = 'pending'",
-    )
-    .get(candidate.work_id).n;
-  if (!remaining) {
-    db.prepare(
-      `UPDATE works SET catalogue_status = 'reviewed' WHERE id = ? AND wikidata_qid IS NULL`,
-    ).run(candidate.work_id);
-  }
 }
 
 async function main() {
