@@ -1,0 +1,24 @@
+[
+  {
+    "slug": "met-fifth-avenue",
+    "name": "The Met Fifth Avenue",
+    "kind": "museum",
+    "city": "New York",
+    "country": "United States",
+    "lat": 40.7794,
+    "lon": -73.9632,
+    "url": "https://www.metmuseum.org/visit/plan-your-visit/met-fifth-avenue",
+    "wikidata_qid": "Q160236"
+  },
+  {
+    "slug": "met-cloisters",
+    "name": "The Met Cloisters",
+    "kind": "museum",
+    "city": "New York",
+    "country": "United States",
+    "lat": 40.8649,
+    "lon": -73.9318,
+    "url": "https://www.metmuseum.org/visit/plan-your-visit/met-cloisters",
+    "wikidata_qid": null
+  }
+]

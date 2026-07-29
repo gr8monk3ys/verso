@@ -1,0 +1,40 @@
+{
+  "name": "verso",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A logging, rating and review platform for art",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --experimental-sqlite scripts/db.mjs migrate",
+    "db:reset": "node --experimental-sqlite scripts/db.mjs reset",
+    "db:seed": "node --experimental-sqlite scripts/db.mjs seed",
+    "db:demo": "node --experimental-sqlite scripts/db.mjs demo",
+    "ingest:met": "node --experimental-sqlite scripts/ingest/met.mjs",
+    "ingest:aic": "node --experimental-sqlite scripts/ingest/aic.mjs",
+    "reconcile": "node --experimental-sqlite scripts/ingest/reconcile.mjs",
+    "metrics": "node --experimental-sqlite scripts/metrics.mjs",
+    "test": "node --experimental-sqlite --test tests/"
+  },
+  "dependencies": {
+    "next": "15.5.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.13",
+    "@types/node": "22.18.1",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "tailwindcss": "4.1.13",
+    "typescript": "5.9.2"
+  }
+}

@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local database and the 318 MB Met CSV. The reconciled seed under
+# data/seed/ is committed; the raw download is not.
+data/verso.db
+data/verso.db-*
+data/cache/
+public/uploads/
+
+.env
+.env.local
+.DS_Store
