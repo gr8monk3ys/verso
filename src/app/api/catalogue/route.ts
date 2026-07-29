@@ -1,0 +1,68 @@
+import { NextResponse } from "next/server";
+import { all } from "@/lib/db";
+import { searchWorks } from "@/lib/domain/works";
+import { venueBySlug } from "@/lib/domain/venues";
+
+/**
+ * Two jobs:
+ *   ?q=…              type-ahead for the capture and search screens
+ *   ?venue=slug&full  the whole on-view list for a venue, cached in IndexedDB
+ *                     so search still works in a basement (§9.1)
+ */
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const query = url.searchParams.get("q") ?? "";
+  const venueSlug = url.searchParams.get("venue");
+  const venue = venueSlug ? venueBySlug(venueSlug) : undefined;
+
+  if (url.searchParams.has("full")) {
+    if (!venue) return NextResponse.json({ error: "unknown venue" }, { status: 404 });
+    const works = all<{
+      id: number;
+      slug: string;
+      title: string;
+      artist: string;
+      date: string;
+      gallery: string | null;
+    }>(
+      `SELECT w.id, w.slug, w.title, w.artist_display AS artist, w.date_display AS date,
+              d.location_label AS gallery
+         FROM displays d JOIN works w ON w.id = d.work_id
+        WHERE d.venue_id = ? AND d.ended_on IS NULL
+        ORDER BY w.title`,
+      venue.id,
+    );
+    return NextResponse.json(
+      {
+        venue: { id: venue.id, slug: venue.slug, name: venue.name },
+        works: works.map((work) => ({
+          ...work,
+          haystack: `${work.title} ${work.artist}`.toLowerCase(),
+        })),
+      },
+      // The catalogue changes slowly; the client also keeps its own copy.
+      { headers: { "cache-control": "private, max-age=3600" } },
+    );
+  }
+
+  const results = searchWorks(query, {
+    limit: Number(url.searchParams.get("limit") ?? 12),
+    venueId: venue?.id ?? null,
+    onViewOnly: url.searchParams.has("onview"),
+  });
+
+  return NextResponse.json({
+    results: results.map((work) => ({
+      id: work.id,
+      slug: work.slug,
+      title: work.title,
+      artist: work.artist_display,
+      date: work.date_display,
+      venue: work.venue_name,
+      gallery: work.location_label,
+      image: work.image_url,
+      avgRating: work.avg_rating,
+      sightings: work.sighting_count,
+    })),
+  });
+}

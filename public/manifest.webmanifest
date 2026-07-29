@@ -1,0 +1,19 @@
+{
+  "name": "Verso — log the art you see",
+  "short_name": "Verso",
+  "description": "A permanent, searchable record of the art you've seen, logged work by work.",
+  "start_url": "/capture",
+  "display": "standalone",
+  "background_color": "#12100e",
+  "theme_color": "#12100e",
+  "orientation": "portrait",
+  "categories": ["lifestyle", "education"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
