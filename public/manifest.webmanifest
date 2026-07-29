@@ -1,19 +1,23 @@
 {
   "name": "Verso — log the art you see",
   "short_name": "Verso",
-  "description": "A permanent, searchable record of the art you've seen, logged work by work.",
+  "description": "A permanent, searchable record of the art you've seen, logged work by work rather than visit by visit.",
   "start_url": "/capture",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#12100e",
   "theme_color": "#12100e",
   "orientation": "portrait",
-  "categories": ["lifestyle", "education"],
+  "categories": ["lifestyle", "education", "social"],
+  "shortcuts": [
+    { "name": "Log a work", "short_name": "Log", "url": "/capture" },
+    { "name": "To rate", "short_name": "Rate", "url": "/me/queue" },
+    { "name": "Search the catalogue", "short_name": "Search", "url": "/search" }
+  ],
   "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

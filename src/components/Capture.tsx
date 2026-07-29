@@ -412,6 +412,15 @@ export function Capture({ venues, today }: { venues: Venue[]; today: string }) {
           autoCapitalize="none"
           autoComplete="off"
         />
+        {query.trim().length >= 2 && results.length === 0 && (
+          <p className="mt-2 text-xs text-[var(--color-muted)]">
+            Nothing matching here.{" "}
+            <Link href={`/capture/report?venue=${venueId ?? ""}`} className="underline">
+              Tell us what&apos;s on the wall
+            </Link>{" "}
+            and we&apos;ll add it.
+          </p>
+        )}
         {results.length > 0 && (
           <ul className="mt-2 border rule divide-y divide-[var(--color-line)]">
             {results.map((candidate) => (

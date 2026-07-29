@@ -114,9 +114,11 @@ export function SightingItem({
             sighting.like_count > 0 && <span>♥ {sighting.like_count}</span>
           )}
           {sighting.comment_count > 0 && (
-            <Link href={`/work/${sighting.work_slug}`}>{sighting.comment_count} comments</Link>
+            <Link href={`/sighting/${sighting.id}`}>{sighting.comment_count} comments</Link>
           )}
-          <span className="ml-auto">{formatRelative(sighting.created_at)}</span>
+          <Link href={`/sighting/${sighting.id}`} className="ml-auto">
+            {formatRelative(sighting.created_at)}
+          </Link>
         </div>
       </div>
     </article>

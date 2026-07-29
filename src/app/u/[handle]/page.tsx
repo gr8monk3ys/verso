@@ -11,6 +11,10 @@ import { Stars } from "@/components/Stars";
 import { SightingItem } from "@/components/SightingItem";
 import { displayArtist, pluralize } from "@/lib/format";
 import { toggleFollowAction } from "@/app/actions";
+import { blockUserAction } from "@/app/account/actions";
+import { reportAction } from "@/app/sighting/actions";
+import { isBlockedEitherWay, REPORT_REASONS } from "@/lib/domain/moderation.mjs";
+import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +48,7 @@ export default async function ProfilePage({
   const followed = viewer ? isFollowing(viewer.id, profile.id) : false;
   const years = loggedYears(profile.id);
   const path = `/u/${profile.handle}`;
+  const blocked = viewer ? isBlockedEitherWay(db(), viewer.id, profile.id) : false;
 
   return (
     <div className="pb-10">
@@ -162,6 +167,39 @@ export default async function ProfilePage({
             ))}
           </ul>
         </section>
+      )}
+
+      {viewer && !isSelf && (
+        <details className="mt-8 text-xs text-[var(--color-muted)]">
+          <summary className="cursor-pointer">Block or report</summary>
+          <div className="mt-2 space-y-3">
+            <form action={blockUserAction}>
+              <input type="hidden" name="user_id" value={profile.id} />
+              <input type="hidden" name="next" value={path} />
+              {blocked && <input type="hidden" name="undo" value="1" />}
+              <button className="btn px-3 py-1 text-sm">
+                {blocked ? `Unblock @${profile.handle}` : `Block @${profile.handle}`}
+              </button>
+              <p className="mt-1">
+                Blocking is silent. They aren&apos;t told, you stop seeing each
+                other, and any follows between you are dropped.
+              </p>
+            </form>
+            <form action={reportAction} className="space-y-2">
+              <input type="hidden" name="subject_type" value="user" />
+              <input type="hidden" name="subject_id" value={profile.id} />
+              <input type="hidden" name="next" value={path} />
+              <select name="reason" className="field text-sm">
+                {REPORT_REASONS.map((reason: { value: string; label: string }) => (
+                  <option key={reason.value} value={reason.value}>
+                    {reason.label}
+                  </option>
+                ))}
+              </select>
+              <button className="btn btn-ghost px-3 py-1 text-sm">Report this account</button>
+            </form>
+          </div>
+        </details>
       )}
 
       <section className="border-t rule pt-4">

@@ -335,3 +335,65 @@ CREATE TABLE IF NOT EXISTS reconciliation_candidates (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_recon_status ON reconciliation_candidates(status, score DESC);
+
+-- ======================================================================
+-- Account lifecycle, moderation and catalogue requests.
+-- ======================================================================
+
+-- Single-use password reset tokens. Stored hashed: a leaked database should
+-- not hand over working reset links the way a leaked plaintext table would.
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  used_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+
+-- Blocking is one-directional and asymmetric: the blocker stops seeing the
+-- blocked, and the blocked stops being able to reach the blocker. Neither is
+-- told about the other.
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (blocker_id, blocked_id),
+  CHECK (blocker_id <> blocked_id)
+);
+CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks(blocked_id);
+
+CREATE TABLE IF NOT EXISTS reports (
+  id           INTEGER PRIMARY KEY,
+  reporter_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  -- sighting | comment | user | work
+  subject_type TEXT NOT NULL,
+  subject_id   INTEGER NOT NULL,
+  reason       TEXT NOT NULL,
+  note         TEXT NOT NULL DEFAULT '',
+  -- open | actioned | dismissed
+  status       TEXT NOT NULL DEFAULT 'open',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  resolved_at  TEXT,
+  UNIQUE (reporter_id, subject_type, subject_id)
+);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at DESC);
+
+-- "It's on the wall in front of me and it isn't in your catalogue." Without
+-- this the capture screen has a dead end, which is the one place the product
+-- cannot afford one (§9.1).
+CREATE TABLE IF NOT EXISTS work_requests (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  venue_id    INTEGER REFERENCES venues(id) ON DELETE SET NULL,
+  title       TEXT NOT NULL,
+  artist      TEXT NOT NULL DEFAULT '',
+  location    TEXT NOT NULL DEFAULT '',
+  note        TEXT NOT NULL DEFAULT '',
+  -- open | added | rejected
+  status      TEXT NOT NULL DEFAULT 'open',
+  work_id     INTEGER REFERENCES works(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_work_requests_status ON work_requests(status, created_at DESC);
