@@ -14,12 +14,15 @@ import { toggleLikeAction } from "@/app/actions";
 export function SightingItem({
   sighting,
   showUser = true,
+  showWork = true,
   liked = false,
   canLike = false,
   next = "/",
 }: {
   sighting: SightingCard;
   showUser?: boolean;
+  /** Off on a Work page, where repeating the title above every review is noise. */
+  showWork?: boolean;
   liked?: boolean;
   canLike?: boolean;
   next?: string;
@@ -28,24 +31,33 @@ export function SightingItem({
 
   return (
     <article className="flex gap-3 border-b rule py-4">
-      <Link href={`/work/${sighting.work_slug}`} className="w-16 shrink-0 md:w-20">
-        <Plate
-          title={sighting.work_title}
-          artist={sighting.work_artist}
-          imageUrl={sighting.work_image}
-        />
-      </Link>
+      {showWork && (
+        <Link href={`/work/${sighting.work_slug}`} className="w-16 shrink-0 md:w-20">
+          <Plate
+            title={sighting.work_title}
+            artist={sighting.work_artist}
+            imageUrl={sighting.work_image}
+          />
+        </Link>
+      )}
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <Link href={`/work/${sighting.work_slug}`} className="display text-lg leading-tight">
-            {sighting.work_title}
-          </Link>
-          <span className="text-sm text-[var(--color-muted)]">{sighting.work_date}</span>
-        </div>
-        <p className="truncate text-sm text-[var(--color-muted)]">
-          {displayArtist(sighting.work_artist)}
-        </p>
+        {showWork && (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <Link
+                href={`/work/${sighting.work_slug}`}
+                className="display text-lg leading-tight"
+              >
+                {sighting.work_title}
+              </Link>
+              <span className="text-sm text-[var(--color-muted)]">{sighting.work_date}</span>
+            </div>
+            <p className="truncate text-sm text-[var(--color-muted)]">
+              {displayArtist(sighting.work_artist)}
+            </p>
+          </>
+        )}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-muted)]">
           {showUser && (

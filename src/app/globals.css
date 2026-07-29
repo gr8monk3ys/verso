@@ -24,53 +24,58 @@
   --radius-card: 2px;
 }
 
-:root {
-  color-scheme: dark;
-}
-
-html,
-body {
-  background: var(--color-ink);
-  color: var(--color-paper);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-body {
-  /* Room for the fixed bottom bar plus the iOS home indicator. */
-  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
-}
-
-@media (min-width: 768px) {
-  body {
-    padding-bottom: 0;
+/* Element defaults live in the base layer. Unlayered CSS outruns every
+   Tailwind utility in the cascade, and a bare `button { color: inherit }`
+   sitting outside a layer will quietly beat .btn-primary's colour. */
+@layer base {
+  :root {
+    color-scheme: dark;
   }
-}
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  html,
+  body {
+    background: var(--color-ink);
+    color: var(--color-paper);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
 
-::selection {
-  background: var(--color-accent);
-  color: var(--color-ink);
-}
+  body {
+    /* Room for the fixed bottom bar plus the iOS home indicator. */
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
 
-input,
-textarea,
-select,
-button {
-  font: inherit;
-  color: inherit;
-}
+  @media (min-width: 768px) {
+    body {
+      padding-bottom: 0;
+    }
+  }
 
-/* iOS zooms the viewport on focus for anything under 16px. */
-input,
-textarea,
-select {
-  font-size: max(16px, 1rem);
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-ink);
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* iOS zooms the viewport on focus for anything under 16px. */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1rem);
+  }
 }
 
 @utility rule {
@@ -102,10 +107,12 @@ select {
   border-color: var(--color-muted);
 }
 
-input.field:focus,
-textarea.field:focus,
-select.field:focus {
-  border-color: var(--color-muted);
+@layer base {
+  input.field:focus,
+  textarea.field:focus,
+  select.field:focus {
+    border-color: var(--color-muted);
+  }
 }
 
 @utility btn {
@@ -132,9 +139,11 @@ select.field:focus {
   background: transparent;
 }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
+@layer base {
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 }
 
 /* The thumbnail placeholder: most works have no image we may show (§10.5), so

@@ -334,27 +334,39 @@ export function Capture({ venues, today }: { venues: Venue[]; today: string }) {
         </span>
       </div>
 
-      <div className="relative overflow-hidden border rule bg-black">
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className="aspect-[3/4] w-full object-cover opacity-90"
-        />
-        {cameraError && (
-          <p className="absolute inset-x-0 bottom-0 bg-[var(--color-ink)]/85 px-3 py-2 text-center text-xs text-[var(--color-muted)]">
-            {cameraError}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={() => void identify()}
-          disabled={busy}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 btn btn-primary px-6"
-        >
-          {busy ? "Looking…" : usesImage ? "Identify" : "What's here?"}
-        </button>
-      </div>
+      {/* No camera is a normal state, not an error state — a phone with the
+          permission denied, or a desktop. Collapse the viewfinder rather than
+          leaving a black rectangle between the user and the shortlist. */}
+      {cameraError ? (
+        <div className="flex items-center justify-between gap-3 border rule px-3 py-2">
+          <p className="text-xs text-[var(--color-muted)]">{cameraError}</p>
+          <button
+            type="button"
+            onClick={() => void identify()}
+            disabled={busy}
+            className="btn px-4 py-1.5 text-sm"
+          >
+            {busy ? "Looking…" : "What's here?"}
+          </button>
+        </div>
+      ) : (
+        <div className="relative overflow-hidden border rule bg-black">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="aspect-[3/4] w-full object-cover opacity-90"
+          />
+          <button
+            type="button"
+            onClick={() => void identify()}
+            disabled={busy}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 btn btn-primary px-6"
+          >
+            {busy ? "Looking…" : usesImage ? "Identify" : "What's here?"}
+          </button>
+        </div>
+      )}
 
       {candidates.length > 0 && (
         <section>

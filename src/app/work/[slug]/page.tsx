@@ -211,6 +211,7 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
             <div key={review.id}>
               <SightingItem
                 sighting={review}
+                showWork={false}
                 liked={liked.has(review.id)}
                 canLike={Boolean(user)}
                 next={path}

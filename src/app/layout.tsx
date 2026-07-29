@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   description:
     "A permanent, searchable record of the art you've seen — logged work by work, not visit by visit.",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
 export const viewport: Viewport = {

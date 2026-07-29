@@ -131,7 +131,7 @@ function Gate({
             <tr key={label} className="border-t rule">
               <td className="py-2 pr-3">{label}</td>
               <td className="py-2 pr-3 text-right tabular-nums">{value}</td>
-              <td className="py-2 pr-3 text-right text-xs text-[var(--color-muted)]">
+              <td className="whitespace-nowrap py-2 pr-3 text-right text-xs text-[var(--color-muted)]">
                 ≥ {threshold}
               </td>
               <td
