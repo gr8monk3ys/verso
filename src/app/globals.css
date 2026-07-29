@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+/*
+ * Verso's surface is a wall label, not a social network: quiet, typographic,
+ * and out of the way of the work. Mobile-first — the critical path (§9.1) is
+ * one hand, in a gallery, with a queue behind you.
+ */
+
+@theme {
+  --color-ink: #12100e;
+  --color-ink-soft: #1c1a17;
+  --color-paper: #f7f4ee;
+  --color-paper-dim: #e9e3d8;
+  --color-muted: #8a8378;
+  --color-line: #2a2724;
+  --color-accent: #c9a227;
+  --color-accent-soft: #f0d98a;
+
+  --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino,
+    Georgia, "Times New Roman", serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 2px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* Room for the fixed bottom bar plus the iOS home indicator. */
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  body {
+    padding-bottom: 0;
+  }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-ink);
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* iOS zooms the viewport on focus for anything under 16px. */
+input,
+textarea,
+select {
+  font-size: max(16px, 1rem);
+}
+
+@utility rule {
+  border-color: var(--color-line);
+}
+
+@utility display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+@utility label-caps {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+@utility field {
+  width: 100%;
+  background: var(--color-ink-soft);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  padding: 0.625rem 0.75rem;
+  outline: none;
+}
+
+@utility field-focus {
+  border-color: var(--color-muted);
+}
+
+input.field:focus,
+textarea.field:focus,
+select.field:focus {
+  border-color: var(--color-muted);
+}
+
+@utility btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  padding: 0.625rem 1rem;
+  background: var(--color-ink-soft);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+@utility btn-primary {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  border-color: var(--color-paper);
+  font-weight: 600;
+}
+
+@utility btn-ghost {
+  background: transparent;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The thumbnail placeholder: most works have no image we may show (§10.5), so
+   the fallback has to look deliberate rather than broken. */
+@utility plate {
+  background: linear-gradient(
+    145deg,
+    color-mix(in oklab, var(--color-ink-soft) 92%, var(--color-paper)),
+    var(--color-ink-soft)
+  );
+  border: 1px solid var(--color-line);
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@utility pulsing {
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}

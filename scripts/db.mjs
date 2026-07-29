@@ -8,7 +8,7 @@
  *   node scripts/db.mjs demo      add demo users, sightings, lists, follows
  */
 
-import { createReadStream, rmSync, existsSync } from "node:fs";
+import { createReadStream, rmSync, existsSync, readdirSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
@@ -17,8 +17,17 @@ import { openDb, transact, DB_PATH } from "./lib/db.mjs";
 import { slugify } from "../src/lib/text.mjs";
 import { seedDemo } from "./lib/demo.mjs";
 
-const CATALOGUE = path.join("data", "seed", "met-catalogue.ndjson.gz");
-const VENUES = path.join("data", "seed", "venues.json");
+const SEED_DIR = path.join("data", "seed");
+const VENUES = path.join(SEED_DIR, "venues.json");
+
+/** Every *-catalogue.ndjson.gz in data/seed, so a second source just drops in. */
+function catalogueFiles() {
+  if (!existsSync(SEED_DIR)) return [];
+  return readdirSync(SEED_DIR)
+    .filter((name) => name.endsWith("-catalogue.ndjson.gz"))
+    .sort()
+    .map((name) => path.join(SEED_DIR, name));
+}
 
 const command = process.argv[2] ?? "migrate";
 
@@ -55,9 +64,10 @@ function artistTail(artistDisplay) {
 }
 
 async function seedCatalogue(db) {
-  if (!existsSync(CATALOGUE)) {
+  const files = catalogueFiles();
+  if (!files.length) {
     console.error(
-      `missing ${CATALOGUE}\nRun: node scripts/ingest/met.mjs --limit 10000`,
+      `no catalogue in ${SEED_DIR}\nRun: node scripts/ingest/met.mjs --limit 10000`,
     );
     process.exit(1);
   }
@@ -74,8 +84,8 @@ async function seedCatalogue(db) {
       slug, title, artist_display, artist_sort, date_display, date_begin, date_end,
       medium, dimensions, classification, culture, credit_line, home_venue_id,
       wikidata_qid, artist_qid, artist_ulan, catalogue_status, is_public_domain,
-      source_name, source_url
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      source_name, source_url, image_url, image_credit, image_licence
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `);
   const insertIdentifier = db.prepare(
     "INSERT OR IGNORE INTO work_identifiers (work_id, scheme, value) VALUES (?,?,?)",
@@ -87,15 +97,24 @@ async function seedCatalogue(db) {
   `);
   const slugTaken = db.prepare("SELECT 1 FROM works WHERE slug = ?");
 
+  const SOURCE_NAMES = {
+    met: "The Metropolitan Museum of Art (Open Access, CC0)",
+    aic: "Art Institute of Chicago (CC0 metadata)",
+  };
+  const idScheme = (source) => `${source}_object_id`;
+
   let inserted = 0;
   let skipped = 0;
   let displays = 0;
   const batch = [];
-  for await (const record of readNdjsonGz(CATALOGUE)) batch.push(record);
+  for (const file of files) {
+    for await (const record of readNdjsonGz(file)) batch.push(record);
+  }
 
   transact(db, () => {
     for (const record of batch) {
-      if (findBySource.get("met_object_id", String(record.sourceId))) {
+      const source = record.source ?? "met";
+      if (findBySource.get(idScheme(source), String(record.sourceId))) {
         skipped++;
         continue;
       }
@@ -103,7 +122,9 @@ async function seedCatalogue(db) {
       if (slugTaken.get(slug)) slug = `${slug}-${record.sourceId}`;
 
       // Reconciliation status: the Met supplies the Q-number itself for most
-      // objects, which is an institutional assertion, not a guess.
+      // objects, which is an institutional assertion, not a guess. Sources
+      // that don't (the AIC) arrive unreconciled and go through
+      // scripts/ingest/reconcile.mjs.
       const status = record.wikidataQid ? "matched" : "unreconciled";
 
       const result = insertWork.run(
@@ -125,18 +146,27 @@ async function seedCatalogue(db) {
         record.artistUlan,
         status,
         record.isPublicDomain ? 1 : 0,
-        "The Metropolitan Museum of Art (Open Access, CC0)",
+        SOURCE_NAMES[source] ?? source,
         record.url || null,
+        record.imageUrl ?? null,
+        record.imageCredit ?? null,
+        record.imageLicence ?? null,
       );
       const workId = Number(result.lastInsertRowid);
-      insertIdentifier.run(workId, "met_object_id", String(record.sourceId));
-      if (record.accession) insertIdentifier.run(workId, "met_accession", record.accession);
+      insertIdentifier.run(workId, idScheme(source), String(record.sourceId));
+      if (record.accession) {
+        insertIdentifier.run(workId, `${source}_accession`, record.accession);
+      }
       if (record.wikidataQid) insertIdentifier.run(workId, "wikidata", record.wikidataQid);
       if (record.artistUlan) insertIdentifier.run(workId, "ulan", record.artistUlan);
 
       const venueId = venueIds.get(record.venueSlug);
       if (venueId && record.gallery) {
-        insertDisplay.run(workId, venueId, `Gallery ${record.gallery}`);
+        // The Met numbers galleries; the AIC titles them.
+        const label = /^\d/.test(record.gallery)
+          ? `Gallery ${record.gallery}`
+          : record.gallery;
+        insertDisplay.run(workId, venueId, label);
         displays++;
       }
       inserted++;

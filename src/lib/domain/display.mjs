@@ -24,6 +24,13 @@ export const STALE_AFTER_DAYS = 400;
  * an undated memory — which asserts nothing about today and is ignored here).
  *
  * Returns the display id, or null when the sighting carried no usable evidence.
+ *
+ * @param {any} db
+ * @param {{workId: number,
+ *          venueId: number | null,
+ *          seenOn: string | null,
+ *          exhibitionId?: number | null}} assertion
+ * @returns {number | null}
  */
 export function assertDisplay(db, { workId, venueId, seenOn, exhibitionId = null }) {
   if (!workId || !venueId || !seenOn) return null;

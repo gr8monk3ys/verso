@@ -77,13 +77,6 @@ export function parseCsvLine(line) {
   return cells;
 }
 
-/** Quote a value for CSV output (used by the data export in §8/G1). */
-export function csvCell(value) {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-export function csvLine(values) {
-  return values.map(csvCell).join(",");
-}
+// Output-side helpers live with the app, which also needs them for the user
+// data export (§8, G1).
+export { csvCell, csvLine, csvDocument } from "../../src/lib/csv.mjs";

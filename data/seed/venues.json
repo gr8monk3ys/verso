@@ -20,5 +20,16 @@
     "lon": -73.9318,
     "url": "https://www.metmuseum.org/visit/plan-your-visit/met-cloisters",
     "wikidata_qid": null
+  },
+  {
+    "slug": "art-institute-chicago",
+    "name": "Art Institute of Chicago",
+    "kind": "museum",
+    "city": "Chicago",
+    "country": "United States",
+    "lat": 41.8796,
+    "lon": -87.6237,
+    "url": "https://www.artic.edu/",
+    "wikidata_qid": "Q239303"
   }
 ]
