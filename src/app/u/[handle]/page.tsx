@@ -92,6 +92,8 @@ export default async function ProfilePage({
               {year} in art
             </Link>
           ))}
+          {isSelf && <Link href="/me/watchlist">Want to see</Link>}
+          {isSelf && <Link href="/me/settings">Settings</Link>}
           {isSelf && <Link href="/me/export">Export</Link>}
         </nav>
       </header>

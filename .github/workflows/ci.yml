@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # node:sqlite needs 22.5+; the app uses no native modules.
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+      # The §13 guardrail: catalogue match accuracy below 95% means stop
+      # feature work. `npm run metrics` exits non-zero when it fails, which is
+      # the only reason it counts as a guardrail rather than a chart. The
+      # reconciled catalogue is committed, so this needs no network.
+      - name: Metric gates
+        run: |
+          npm run db:reset
+          npm run db:seed
+          npm run db:demo
+          npm run metrics
