@@ -1,5 +1,6 @@
 import "server-only";
-import { all, get, run } from "@/lib/db";
+import { all, db, get, run } from "@/lib/db";
+import { hiddenUserIds } from "@/lib/domain/moderation.mjs";
 import type { SightingCard } from "@/lib/domain/sightings";
 
 export function follow(followerId: number, followeeId: number) {
@@ -64,6 +65,11 @@ export function feedForUser(
   options: { limit?: number; offset?: number } = {},
 ): SightingCard[] {
   const { limit = 30, offset = 0 } = options;
+  // Blocking that leaves the blocked person in your feed is not blocking.
+  const hidden = hiddenUserIds(db(), userId) as number[];
+  const blockFilter = hidden.length
+    ? `AND s.user_id NOT IN (${hidden.map(() => "?").join(",")})`
+    : "";
   return all<SightingCard>(
     `SELECT s.*,
             w.slug AS work_slug, w.title AS work_title, w.artist_display AS work_artist,
@@ -78,13 +84,14 @@ export function feedForUser(
        JOIN users u ON u.id = s.user_id
        JOIN works w ON w.id = s.work_id
        LEFT JOIN venues v ON v.id = s.venue_id
-      WHERE s.is_private = 0 AND u.is_private = 0
+      WHERE s.is_private = 0 AND u.is_private = 0 ${blockFilter}
       ORDER BY date(s.created_at) DESC,
                (s.review IS NOT NULL AND trim(s.review) <> '') DESC,
                (s.rating IS NOT NULL) DESC,
                s.created_at DESC
       LIMIT ? OFFSET ?`,
     userId,
+    ...hidden,
     limit,
     offset,
   );
@@ -100,9 +107,14 @@ export function suggestedUsers(userId: number, limit = 5) {
         AND u.is_private = 0
         AND s.user_id NOT IN (SELECT followee_id FROM follows WHERE follower_id = ?)
         AND s.work_id IN (SELECT work_id FROM sightings WHERE user_id = ?)
+        AND s.user_id NOT IN (
+          SELECT blocked_id FROM blocks WHERE blocker_id = ?
+          UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)
       GROUP BY u.id
       ORDER BY overlap DESC, u.handle
       LIMIT ?`,
+    userId,
+    userId,
     userId,
     userId,
     userId,

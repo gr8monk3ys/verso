@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 128" role="img" aria-label="Verso">
+  <title>Verso</title>
+  <rect x="14" y="14" width="84" height="100" fill="none" stroke="#f7f4ee" stroke-width="7"/>
+  <path d="M14 64 H98" stroke="#f7f4ee" stroke-width="5" opacity="0.55"/>
+  <path d="M56 14 V114" stroke="#f7f4ee" stroke-width="5" opacity="0.28"/>
+  <rect x="24" y="82" width="26" height="20" fill="#c9a227"/>
+  <text x="132" y="88" fill="#f7f4ee"
+        font-family="Iowan Old Style, Palatino Linotype, Palatino, Georgia, Times New Roman, serif"
+        font-size="66" letter-spacing="16">VERSO</text>
+</svg>

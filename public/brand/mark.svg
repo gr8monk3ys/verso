@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Verso">
+  <title>Verso</title>
+  <!--
+    The mark is a canvas seen from the verso: the stretcher frame, its cross
+    brace, and the provenance label pasted in the corner. That label is the
+    whole idea of the product — the record on the back of the work, saying
+    where it has been and who has seen it — so it is the one element in the
+    brand's accent gold.
+  -->
+  <rect x="22" y="14" width="84" height="100" fill="none" stroke="currentColor" stroke-width="7"/>
+  <path d="M22 64 H106" stroke="currentColor" stroke-width="5" opacity="0.55"/>
+  <path d="M64 14 V114" stroke="currentColor" stroke-width="5" opacity="0.28"/>
+  <rect x="32" y="82" width="26" height="20" fill="#c9a227"/>
+</svg>

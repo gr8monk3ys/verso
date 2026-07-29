@@ -17,7 +17,13 @@ import { toggleFollowAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(0, Number(pageParam ?? 0) || 0);
   const user = await currentUser();
   if (!user) return <Landing />;
 
@@ -26,7 +32,8 @@ export default async function HomePage() {
   // back-navigations would otherwise inflate it (§13).
   recordEventOncePerWindow(user.id, "feed_open");
 
-  const feed = feedForUser(user.id, { limit: 40 });
+  const PAGE = 30;
+  const feed = feedForUser(user.id, { limit: PAGE, offset: page * PAGE });
   const liked = likedByUser(
     user.id,
     feed.map((item) => item.id),
@@ -79,6 +86,13 @@ export default async function HomePage() {
             next="/"
           />
         ))
+      )}
+
+      {(page > 0 || feed.length === PAGE) && (
+        <nav className="mt-6 flex justify-between text-sm">
+          {page > 0 ? <Link href={`/?page=${page - 1}`}>← Newer</Link> : <span />}
+          {feed.length === PAGE && <Link href={`/?page=${page + 1}`}>Older →</Link>}
+        </nav>
       )}
 
       {suggestions.length > 0 && (

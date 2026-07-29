@@ -1,117 +1,187 @@
+<img src="docs/screenshots/hero.png" alt="Verso — capture, work page, and Year in Art screens" width="100%">
+
 # Verso
 
-A logging, rating and review platform for art — Letterboxd, but the unit is an
-individual **work**, not a visit.
+**A diary for artworks.** Letterboxd, but the unit is an individual work — not a
+film, not an exhibition, not a visit. Every painting, bronze and altarpiece you
+stop in front of, with a date, a rating and a note, kept somewhere you can
+search in ten years and take with you if you leave.
 
-This repository is a working implementation of the PRD in
-[`docs/PRD.md`](docs/PRD.md): a mobile-first web app with a real catalogue of
-10,000 works currently on view at The Met, offline-first capture, a social
-layer, the §13 metric gates computed live, and the crowdsourced on-view
-flywheel from §10.3.
+Built from the product requirements in [`docs/PRD.md`](docs/PRD.md), with a real
+catalogue of **10,000 works currently on view at The Met**, offline-first
+capture, a social layer, and the metric gates that decide whether the whole idea
+is working.
 
-```
+```bash
+git clone https://github.com/gr8monk3ys/verso && cd verso
 npm install
-node scripts/ingest/met.mjs --limit 10000   # ~15s, downloads 318 MB of CC0 CSV
-npm run db:reset && npm run db:seed         # schema + catalogue
-npm run db:demo                             # 40 demo users, ~4,700 sightings
-npm run dev                                 # http://localhost:3000
+npm run db:reset && npm run db:seed && npm run db:demo
+npm run dev            # http://localhost:3000
 ```
 
-The seeded catalogue is committed (`data/seed/met-catalogue.ndjson.gz`, 908 KB),
-so the ingest step is optional — `db:seed` works straight from a fresh clone.
-Demo accounts all use the password `verso-demo`; start with `@priya`, who is
-also the demo's staff account and can reach `/internal`.
+Sign in as **`priya`** with password **`verso-demo`**. The catalogue seed is
+committed, so nothing above touches the network.
 
 ---
 
-## What's here
+## The bet
 
-| PRD section | Implementation |
+Every previous attempt at this has stalled at one city. The usual diagnosis is
+execution; the more likely one is **frequency**. A film enthusiast logs 50–150
+titles a year. A dedicated gallery-goer sees maybe 15 exhibitions — too few
+events to form a habit, and a feed with 15 posts a year is not a feed.
+
+So Verso logs **works, not visits**. One visit contains fifteen things worth
+logging. That single decision turns ~15 events a year into plausibly 150+, and
+everything else in the product follows from protecting it:
+
+- **The capture screen never navigates away.** Log, and it re-shortlists for the
+  next work. Bouncing to a confirmation page after each one is exactly how
+  work-logging quietly reverts to visit-logging.
+- **Rating is always deferrable.** Nobody writes criticism standing in front of
+  a Rothko with a queue behind them. Log now; the evening prompt asks later.
+- **Nothing waits for the network.** Gallery basements have no signal, so
+  sightings are written to the device first and synced afterwards.
+
+Whether the bet holds is a measurable question, and the app measures it rather
+than assuming it — see [Metrics](#metrics).
+
+---
+
+## What it looks like
+
+| | |
 |---|---|
-| §7 object model | `src/lib/db/schema.sql` — Work, Venue, Display, Exhibition, Inclusion, Sighting, List, one table each |
-| §8 V0 | capture, catalogue search, sightings with half-star ratings, tags, private notes, profile grid, diary, stats, CSV+JSON export |
-| §8 V1 | follows, feed, public work pages with rating distributions, likes, comments, public lists, watchlist with on-display alerts, exhibition pages |
-| §8 V2 | Year in Art, institutional dashboard |
-| §9.1 capture | `src/components/Capture.tsx` — camera-first, one tap to log, never navigates away, rating deferrable |
-| §9.2 retrospective | `/onboarding` and the log form; undated sightings are first-class |
-| §10.1–10.2 data | `scripts/ingest/` — Met + AIC adapters, Wikidata reconciliation with a human review queue |
-| §10.3 on view | `src/lib/domain/display.mjs` — Sightings become Display assertions with decaying confidence |
-| §10.5 image rights | text-only Work pages by default; images only where a licence exists |
-| §12 monetisation | `/internal/venue/[slug]` with the anonymisation policy enforced in `institutional.mjs` |
-| §13 metrics | `/internal/metrics` and `npm run metrics` — exits non-zero when the guardrail fails |
-
-### The three product decisions that matter
-
-**Logging is work-level, and the UI enforces it.** After you log something the
-capture screen stays put and re-shortlists. A visit is fifteen works; bouncing
-to a confirmation page after each one is how work-logging quietly reverts to
-visit-logging, which is the failure mode §4 exists to avoid.
-
-**Offline-first is structural.** Sightings go to IndexedDB first and sync
-afterwards, keyed by a client-minted UUID the server treats as idempotent.
-Nothing on the capture path awaits the network. Replays carry late ratings
-without duplicating the entry.
-
-**Rating is always deferrable.** Log now, rate on the train home. `/me/queue`
-is where the evening prompt lives.
+| <img src="docs/screenshots/capture.png" width="290"><br>**Capture** — camera-first, one tap to log, works offline, shows what's on the wall in the room you're standing in. | <img src="docs/screenshots/work.png" width="290"><br>**The work** — where it is right now, the rating distribution, and reviews from people who stood in front of it. |
+| <img src="docs/screenshots/diary.png" width="290"><br>**The diary** — grouped by day, so a visit reads as a block of works rather than a single entry. | <img src="docs/screenshots/year.png" width="290"><br>**Year in Art** — the Wrapped mechanic, built to be screenshotted. |
+| <img src="docs/screenshots/queue.png" width="290"><br>**The evening queue** — everything logged without a rating comes back, one thumb at a time. | <img src="docs/screenshots/dashboard.png" width="290"><br>**Institutional view** — what visitors actually stop at, under a strict anonymisation floor. |
 
 ---
 
-## Data
+## What's built
 
-### Provenance
+**Logging**
+- Camera-first capture with alternates and one-tap confirm; never auto-logs
+- Full-text catalogue search, online and offline
+- Half-star ratings, free-text reviews, tags, private notes, your own photo
+- Retrospective logging with explicit date precision — "some time in 2019" is a
+  real answer, and renders as *2019*, not 1 January
+- Reproductions logged as a distinct, labelled encounter type
+- Edit or delete any sighting; every sighting has a permalink
 
-The launch catalogue comes from [The Met's Open Access
-dataset](https://github.com/metmuseum/openaccess) (CC0). `scripts/ingest/met.mjs`
-streams the 318 MB `MetObjects.csv` and keeps works with a **Gallery Number** —
-the field populated only when an object is physically on the wall. That is the
-closest thing to the machine-readable on-view feed §10.3 says almost nobody
-publishes, and it bootstraps the Display table.
+**Social**
+- Follows and an activity feed that floats reviews above bare logs
+- Public work pages: aggregate rating, distribution, popular reviews
+- Likes, comments, public lists, watchlist with an on-display alert
+- Exhibition pages with a sightings roll-up
+- Block and report, with a staff moderation queue
 
-Of the 10,000 selected works, **99.7% carry a Wikidata Q-number supplied by the
-museum itself**, so most of the catalogue is reconciled without any guessing.
-86% are public domain.
+**Yours**
+- CSV and JSON export from day one, carrying Wikidata and accession identifiers
+- Account deletion that actually deletes
+- Private diaries and per-sighting privacy
+- Password reset, password change
 
-A second adapter (`scripts/ingest/aic.mjs`) covers the Art Institute of Chicago,
-which publishes `is_on_view`, gallery titles, and CC0 IIIF images for
-public-domain works. It needs network access to `api.artic.edu`; drop its output
-into `data/seed/` and `db:seed` picks it up alongside the Met file.
+**Behind the scenes**
+- Catalogue ingest from The Met and the Art Institute of Chicago
+- Wikidata reconciliation with a human review queue
+- Crowdsourced "on view" inference — sightings become display evidence
+- Live metric gates and a recognition guardrail
+- Institutional analytics under a k-anonymity floor
 
-Kaggle datasets are deliberately not a source, for the reasons in §10.1.
+---
 
-### Reconciliation
+## Is there an iOS or Android app?
 
-Wikidata Q-numbers are the spine. `scripts/ingest/reconcile.mjs` scores
-candidates and applies a strict rule: **nothing between the review floor (0.70)
-and the auto-accept threshold (0.92) is ever written by a machine.** An
-agreeing accession number is decisive; an undated title+artist match is capped
-below auto-accept on purpose, because that is exactly where multiple versions of
-the same composition hide. Near-tied candidates are marked conflicted and never
-guessed between.
+**Not a native one.** Verso is a mobile-first **installable PWA**: on iOS, Share
+→ *Add to Home Screen*; on Android, the browser offers *Install*. You get a
+standalone window with no browser chrome, the app icon on the home screen, home
+screen shortcuts straight to *Log* and *To rate*, and the camera and offline
+queue both work.
 
-Everything else lands in `/internal/reconciliation` for a person. §10.2 budgets
-a few weeks of human review for a 10k catalogue; that queue is where it happens.
-A missed match leaves two rows a human can join later. A wrong match silently
-pools two different paintings' reviews and is close to undetectable afterwards.
+That is the right first step and an honest description of where it stops:
+
+| | PWA today | Native (not built) |
+|---|---|---|
+| Home-screen icon, standalone window | Yes | Yes |
+| Camera capture | Yes | Yes |
+| Works offline, syncs later | Yes | Yes |
+| In the App Store / Play Store | **No** | Yes |
+| Push notifications on iOS | Limited | Yes |
+| Background sync | **No** | Yes |
+| Share-sheet target ("share photo to Verso") | **No** | Yes |
+
+The route to stores is a [Capacitor](https://capacitorjs.com/) wrapper around
+this same app — it needs no rewrite, because the offline queue and the camera
+path are already client-side. That is a deliberate follow-up, not a claim; see
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+---
+
+## The catalogue is real
+
+Not a fixture, not a Kaggle dump. `scripts/ingest/met.mjs` streams The Met's
+CC0 `MetObjects.csv` (318 MB, ~500k objects) and keeps the works with a
+**Gallery Number** — a field the Met populates only when an object is physically
+on the wall.
+
+| | |
+|---|---|
+| Works in the launch catalogue | **10,000**, all currently on view |
+| Reconciled to a Wikidata Q-number | **99.7%** |
+| Public domain | 86% |
+| Committed seed size | 908 KB gzipped |
+
+That gallery field is also the closest thing anyone publishes to a
+machine-readable "what is on the wall today" feed — the single biggest gap in
+this market — and it bootstraps the on-view dataset that visitors' sightings
+then maintain.
+
+Full detail on sources, reconciliation thresholds and the image-rights position:
+[`docs/DATA.md`](docs/DATA.md).
+
+---
+
+## Metrics
+
+Verso ships with the decision thresholds from the PRD computed live, at
+`/internal/metrics` and on the command line:
+
+```bash
+npm run metrics
+```
 
 ```
-node scripts/ingest/reconcile.mjs --limit 500     # needs network (WDQS)
-node scripts/ingest/reconcile.mjs --queue         # what's waiting for a person
-node scripts/ingest/reconcile.mjs --accept 12
+V0 gate — PASS
+  median works / active user / month             15.5   PASS (≥ 8)
+  30-day retention (logged in week 5)           37.5%   PASS (≥ 25.0%)
+  users logging on >1 day                      100.0%   PASS (≥ 40.0%)
+
+Guardrail — PASS
+  recognition accuracy (n=1533)                 97.6%   PASS (≥ 95.0%)
 ```
 
-### Images (§10.5)
+The guardrail exits non-zero. Catalogue match accuracy under 95% is defined as
+"stop feature work and fix the catalogue", and a check that stops nothing is not
+a guardrail.
 
-The Met's dataset excludes images by design, and everything after roughly 1930
-is a copyright wall. So:
+---
 
-- Work pages are **text-only by default** and say so in the catalogue record.
-- `image_url` is populated only from a source that licences it (the AIC's CC0
-  IIIF endpoints), and the licence is displayed next to the image.
-- Images are served from the licensing institution's origin rather than proxied
-  through ours — a rights question, not a performance one.
+## Design
 
-This must be resolved before any contemporary-art expansion, not after.
+Quiet, typographic, and out of the way of the work — a wall label, not a social
+network. Ink `#12100e`, paper `#f7f4ee`, one accent gold `#c9a227` used
+sparingly for ratings and the label in the logo.
+
+The mark is a canvas seen from the *verso*: the stretcher frame, its cross
+brace, and the provenance label pasted in the corner. That label — the record on
+the back of the work, saying where it has been and who has seen it — is the
+product, so it is the one element in gold.
+
+<img src="public/brand/wordmark.svg" alt="Verso wordmark" width="260">
+
+Colours, type, logo variants and the Open Graph card system:
+[`docs/BRAND.md`](docs/BRAND.md).
 
 ---
 
@@ -126,66 +196,24 @@ src/lib/domain/*.ts          typed query layer (server-only)
 src/lib/domain/*.mjs         logic shared by the app, the scripts and the tests
 src/lib/offline/queue.ts     IndexedDB sighting queue + venue catalogue cache
 src/lib/recognition/         provider interface; no-model default
+src/lib/og.tsx               Open Graph card generator
 scripts/ingest/              Met, AIC, Wikidata reconciliation
-scripts/db.mjs               migrate | reset | seed | demo
 tests/                       node:test, in-memory databases, no mocks
 ```
 
 **Why some modules are `.mjs`.** Anything the ingest scripts, the app and the
-test suite all need — sighting writes, display inference, metric definitions,
-text matching, the anonymisation policy — is plain JS taking a database handle.
-One implementation, no build step between the CLI and the server, and the tests
-drive the real code path rather than a copy of it. The TypeScript modules are
-typed wrappers over these.
+tests all need — sighting writes, display inference, metric definitions, text
+matching, the anonymisation policy — is plain JS taking a database handle. One
+implementation, no build step between the CLI and the server, and the tests
+drive the real code path rather than a copy of it.
 
-### Recognition
-
-Deliberately behind an interface, because §3.3 is right that recognition is a
-commodity and not a moat, and §14's fourth question — whether V0 needs it at
-all — deserves evidence rather than a vendor contract.
-
-| `VERSO_RECOGNITION` | Behaviour |
-|---|---|
-| `gallery-prior` (default) | No model. Shortlists what is on the wall in the room you're in, ranked by what you haven't logged. Honest about being a shortlist. |
-| `http` | POSTs the frame to `VERSO_RECOGNITION_URL`, expects `{candidates:[{workId\|wikidataQid\|accession, score}]}`. |
-| `none` | Search only. |
-
-Three rules hold whichever is active (R5): always show alternates, never write a
-sighting without an explicit tap, and record what was offered against what was
-chosen — which is what makes the §13 guardrail a measurement rather than a
-claim.
-
----
-
-## Continuous integration
-
-`.github/workflows/ci.yml` runs the whole sequence — typecheck, tests, build,
-then a seeded database and the metric gates — but is currently set to
-`workflow_dispatch` only. GitHub Actions cannot start a runner in this
-repository: runs are created and fail about three seconds later having executed
-no step, which is a runner or billing condition rather than anything in the
-workflow. Left on `pull_request` it would put a permanent red X on every PR,
-which teaches people to ignore the checks.
-
-**To re-enable:** uncomment the `pull_request` and `push` triggers at the top of
-the file. Nothing else changes.
-
-Until then, `npm run verify` is the same sequence locally, and the guardrail
-still exits non-zero — §13 says recognition accuracy under 95% means stop
-feature work, and a check that stops nothing isn't a guardrail.
-
----
-
-## Metrics
-
-```
-npm run metrics            # prints the §13 gates, exits non-zero if the guardrail fails
-npm run metrics -- --json
-```
-
-Also at `/internal/metrics`. The guardrail exit code is deliberate: §13 says
-recognition accuracy below 95% means stop feature work, and a check that stops
-nothing isn't a guardrail. Put it in CI.
+**Recognition is behind an interface** and defaults to no model at all:
+`gallery-prior` shortlists what is on the wall in the room you're in and says
+so, rather than implying a match. Set `VERSO_RECOGNITION=http` and
+`VERSO_RECOGNITION_URL` to plug in a real one. Whichever is active: always show
+alternates, never write a sighting without an explicit tap, and record what was
+offered against what was chosen — which is what makes the guardrail a
+measurement rather than a claim.
 
 ---
 
@@ -194,77 +222,67 @@ nothing isn't a guardrail. Put it in CI.
 | | |
 |---|---|
 | `npm run dev` / `build` / `start` | the app |
-| `npm test` | 59 tests, no network, no fixtures on disk |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | 72 tests, no network, no fixtures on disk |
 | `npm run check` | typecheck + tests + build |
-| `npm run verify` | `check` plus a seeded database and the metric gates — what a release is cut from |
+| `npm run verify` | `check` plus a seeded database and the metric gates |
 | `npm run db:reset` / `db:seed` / `db:demo` | database lifecycle |
 | `npm run ingest:met` / `ingest:aic` / `reconcile` | catalogue pipeline |
 | `npm run metrics` | the gates |
 
-`VERSO_DB_PATH` overrides the database location (default `data/verso.db`).
-
 ---
 
-## Running it in production
+## Deployment
 
-```
+```bash
 VERSO_DB_PATH=/var/lib/verso/verso.db \
+VERSO_MEDIA_DIR=/var/lib/verso/media \
+VERSO_BASE_URL=https://verso.example \
 VERSO_STAFF_BOOTSTRAP=your-handle \
 NODE_ENV=production npm run build && npm start
 ```
 
 | Variable | Purpose |
 |---|---|
-| `VERSO_DB_PATH` | SQLite file location (default `data/verso.db`) |
-| `VERSO_STAFF_BOOTSTRAP` | Handle promoted to staff on boot — the only way to get the first `/internal` login without a database client |
-| `VERSO_RECOGNITION` | `gallery-prior` (default), `http`, or `none` |
-| `VERSO_RECOGNITION_URL` / `_KEY` | Endpoint and bearer token for the `http` provider |
+| `VERSO_DB_PATH` | SQLite file (default `data/verso.db`) |
+| `VERSO_MEDIA_DIR` | Uploaded sighting photos (default `data/media`) |
+| `VERSO_BASE_URL` | Absolute origin — used in sitemaps, share cards, reset links |
+| `VERSO_STAFF_BOOTSTRAP` | Handle promoted to staff on boot; the only way to reach `/internal` on a fresh deploy |
+| `VERSO_MAIL` | `log` (default), `webhook`, or `none` |
+| `VERSO_MAIL_WEBHOOK` | POST target for outbound mail — Postmark, Resend, an SMTP bridge |
+| `VERSO_RECOGNITION` | `gallery-prior` (default), `http`, `none` |
 
-`/api/health` returns 200 with the catalogue size, or 503 if the database is
-unreachable — point the load balancer at it rather than at `/`, which is 200
-even when queries are failing.
+`/api/health` returns 200 with the catalogue size, or 503 when the database is
+unreachable — point the load balancer at that rather than at `/`.
 
-**Access control.** Everything under `/internal` — the metric gates, the
-reconciliation queue, the institutional dashboards — is staff-only. Signed-out
-visitors are sent to sign in; signed-in non-staff get a 404 rather than a 403,
-so the pages aren't confirmed to exist. The server actions behind the
-reconciliation queue repeat the check, because guarding a page hides a button
-and does not close an endpoint.
-
-**Back up the database file.** `data/verso.db` is the entire product: the
-catalogue can be rebuilt from the Met in fifteen seconds, but the sightings
-cannot be rebuilt from anything. WAL mode means backing up needs
-`sqlite3 verso.db ".backup"` rather than a file copy.
+**Back up `data/`.** The catalogue can be rebuilt from The Met in fifteen
+seconds; the sightings cannot be rebuilt from anything. WAL mode means
+`sqlite3 verso.db ".backup ..."` rather than a file copy.
 
 ---
 
-## What this build does not do
+## What isn't built
 
-Stated plainly, because a prototype that pretends otherwise wastes the next
-person's afternoon:
+Honestly, and in one place: [`docs/ROADMAP.md`](docs/ROADMAP.md). The headlines
+are no native apps, no Content-Security-Policy, no real recognition model, no
+email beyond password reset, exhibitions are demo data, and SQLite is right for
+this scale and wrong for a real launch.
 
-- **No Content-Security-Policy.** The App Router injects inline bootstrap
-  scripts, so a real CSP needs per-request nonces threaded through middleware;
-  a CSP with `unsafe-inline` would be decoration. The other security headers
-  are set. This is the first follow-up.
-- **No real recognition model.** The default provider ranks what is on the wall
-  in the room you're in; it does not look at pixels. The `http` provider is the
-  seam for a real one.
-- **One city, two venues.** New York, because that is where the open on-view
-  data is. §14's second question — which city — is answered by data
-  availability here, not by market analysis; see `docs/DECISIONS.md`.
-- **Exhibitions are demo data.** No listings feed is ingested. Exhibition pages
-  work; the content behind them is synthetic.
-- **No email.** Notifications are in-app only, so a watchlist alert is only
-  seen next time the user opens the app.
-- **Rate limiting is per process.** Correct scope for a single-process SQLite
-  deployment, and the thing to move to shared storage on the same day the
-  database moves.
-- **SQLite, single process.** Right for this scale and wrong for a real launch.
-  The query layer is small and has no ORM to unpick.
+---
+
+## Documentation
+
+| | |
+|---|---|
+| [`docs/PRD.md`](docs/PRD.md) | The product requirements this was built from |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | What was decided where the PRD left a question open, and what would change it |
+| [`docs/DATA.md`](docs/DATA.md) | Sources, reconciliation, the on-view problem, image rights |
+| [`docs/BRAND.md`](docs/BRAND.md) | Colour, type, logo, share cards |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What isn't built, in priority order |
+
+---
 
 ## Licence
 
-GPL-3.0-or-later (see `LICENSE`). Catalogue data is CC0 from The Met's Open
-Access initiative; see `docs/PRD.md` Appendix A for sources.
+GPL-3.0-or-later. Catalogue metadata is CC0 from The Metropolitan Museum of
+Art's Open Access initiative and the Art Institute of Chicago. Verso is not
+affiliated with any museum.
