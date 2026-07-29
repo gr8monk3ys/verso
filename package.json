@@ -21,7 +21,8 @@
     "ingest:aic": "node --experimental-sqlite scripts/ingest/aic.mjs",
     "reconcile": "node --experimental-sqlite scripts/ingest/reconcile.mjs",
     "metrics": "node --experimental-sqlite scripts/metrics.mjs",
-    "test": "node --experimental-sqlite --test tests/"
+    "test": "node --test \"tests/*.test.mjs\"",
+    "check": "npm run typecheck && npm test"
   },
   "dependencies": {
     "next": "15.5.4",

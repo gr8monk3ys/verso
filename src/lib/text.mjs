@@ -24,6 +24,10 @@ export function normalize(value) {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    // Spell out the ampersand before punctuation is stripped: one source has
+    // "Madonna & Child" and the next has "Madonna and Child", and dropping the
+    // symbol entirely would leave a token count mismatch on every such pair.
+    .replace(/&/g, " and ")
     .replace(/[\u2018\u2019\u201c\u201d]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()

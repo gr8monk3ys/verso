@@ -131,6 +131,46 @@ const LIST_SPECS = [
   { handle: "marcus", title: "Bronzes that survive being walked around", description: "", ranked: 1, size: 11 },
 ];
 
+/**
+ * The named personas are the six from §6, plus a background population.
+ *
+ * The background exists for one reason: k-anonymity. The institutional
+ * dashboard suppresses anything derived from fewer than five distinct
+ * visitors, so a six-person demo makes that page render an empty table and
+ * look broken rather than careful. R3's plan is 200 hand-recruited users in
+ * one city; this is a fortieth of that, which is enough for the suppression
+ * threshold to pass on popular works and still bite on quiet ones.
+ */
+const BACKGROUND_USERS = 34;
+
+const FIRST_NAMES = [
+  "Alex", "Bea", "Caro", "Dev", "Emeka", "Fen", "Greta", "Hana", "Ivo", "Juno",
+  "Kit", "Lena", "Mo", "Nils", "Orla", "Pia", "Quinn", "Rae", "Sami", "Tuur",
+  "Uma", "Vic", "Wren", "Xan", "Yara", "Zsa",
+];
+const LAST_NAMES = [
+  "Adeyemi", "Bergström", "Costa", "Duarte", "Egan", "Fournier", "Gao", "Haas",
+  "Iversen", "Jha", "Kowalski", "Lindqvist", "Mbeki", "Novak", "O'Rourke",
+  "Petrov", "Quraishi", "Rossi", "Sandoval", "Takahashi",
+];
+
+function backgroundPersona(index, random) {
+  const first = FIRST_NAMES[index % FIRST_NAMES.length];
+  const last = LAST_NAMES[(index * 7 + 3) % LAST_NAMES.length];
+  const keen = random();
+  return {
+    handle: `${first.toLowerCase().replace(/[^a-z]/g, "")}${index + 10}`,
+    display_name: `${first} ${last}`,
+    bio: "",
+    // A long tail: most people log a little, a few log constantly.
+    visitsPerMonth: Number((0.4 + keen * keen * 4).toFixed(2)),
+    worksPerVisit: [2, 6 + Math.round(keen * 18)],
+    rateProb: 0.3 + keen * 0.5,
+    reviewProb: 0.05 + keen * 0.25,
+    feedOpensPerWeek: Math.round(keen * 6),
+  };
+}
+
 function isoDate(date) {
   return date.toISOString().slice(0, 10);
 }
@@ -145,6 +185,12 @@ function intBetween(random, [low, high]) {
 
 export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
   const random = rng(seed);
+  const personas = [
+    ...PERSONAS,
+    ...Array.from({ length: BACKGROUND_USERS }, (_, index) =>
+      backgroundPersona(index, random),
+    ),
+  ];
   const today = new Date();
   today.setUTCHours(12, 0, 0, 0);
 
@@ -185,7 +231,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
        ON CONFLICT(handle) DO UPDATE SET display_name = excluded.display_name`,
     );
     const userIds = new Map();
-    for (const persona of PERSONAS) {
+    for (const persona of personas) {
       const joined = new Date(today);
       joined.setUTCDate(joined.getUTCDate() - days - intBetween(random, [1, 40]));
       insertUser.run(
@@ -208,6 +254,24 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     for (const [a, b] of FOLLOWS) {
       insertFollow.run(userIds.get(a), userIds.get(b));
       summary.follows++;
+    }
+
+    // The background population follows a handful of people each, weighted
+    // towards the named personas — new users follow the people already
+    // logging, which is what makes a one-city graph dense rather than wide.
+    const allHandles = personas.map((persona) => persona.handle);
+    for (const persona of personas) {
+      if (PERSONAS.some((named) => named.handle === persona.handle)) continue;
+      const count = intBetween(random, [4, 9]);
+      for (let i = 0; i < count; i++) {
+        const target =
+          random() < 0.6
+            ? pick(random, PERSONAS).handle
+            : pick(random, allHandles);
+        if (target === persona.handle) continue;
+        insertFollow.run(userIds.get(persona.handle), userIds.get(target));
+        summary.follows++;
+      }
     }
 
     // ------------------------------------------------------- exhibitions --
@@ -292,7 +356,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     let uuid = 0;
     const sightingsByUser = new Map();
 
-    for (const persona of PERSONAS) {
+    for (const persona of personas) {
       const userId = userIds.get(persona.handle);
       sightingsByUser.set(userId, []);
 
@@ -437,11 +501,11 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     for (const review of publicReviews) {
       for (const userId of allUserIds) {
         if (userId === review.user_id) continue;
-        if (random() < 0.18) {
+        if (random() < 0.05) {
           insertLike.run(userId, review.id);
           summary.likes++;
         }
-        if (random() < 0.05) {
+        if (random() < 0.012) {
           insertComment.run(review.id, userId, pick(random, commentLines));
           summary.comments++;
         }

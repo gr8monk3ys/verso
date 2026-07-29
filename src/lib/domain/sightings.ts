@@ -1,6 +1,6 @@
 import "server-only";
 import { all, db, get, run, transact } from "@/lib/db";
-import { assertDisplay } from "@/lib/domain/display.mjs";
+import * as store from "@/lib/domain/sighting-store.mjs";
 
 export type SightingInput = {
   userId: number;
@@ -71,147 +71,19 @@ const CARD_SELECT = `
     LEFT JOIN venues v ON v.id = s.venue_id
 `;
 
-export function normalizeTag(tag: string): string {
-  return tag.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 32);
-}
-
 /**
  * Create a Sighting.
  *
- * Idempotent on client_uuid: the offline queue (§9.1) retries blind after a
- * dropped connection, and a duplicate diary entry is worse than a lost one.
- * Returns the existing row on replay rather than erroring, so the client can
- * treat retry as success.
+ * A thin typed wrapper: the write itself — including offline replay handling,
+ * display inference and watchlist notification — lives in sighting-store.mjs
+ * so the test suite can exercise it directly against an in-memory database.
  */
 export function createSighting(input: SightingInput): Sighting {
-  return transact(() => {
-    if (input.clientUuid) {
-      const existing = get<Sighting>(
-        "SELECT * FROM sightings WHERE client_uuid = ?",
-        input.clientUuid,
-      );
-      if (existing) {
-        // A replay, not a new event. It may still carry a rating or review
-        // added on the device after the first copy synced — the capture screen
-        // lets you rate a work seconds after logging it — so late-arriving
-        // values are applied, and nulls never erase what's already there.
-        const rating = input.rating ?? existing.rating;
-        const review = input.review?.trim() || existing.review;
-        if (rating !== existing.rating || review !== existing.review) {
-          run(
-            `UPDATE sightings SET rating = ?, review = ?, updated_at = datetime('now')
-              WHERE id = ?`,
-            rating,
-            review,
-            existing.id,
-          );
-          if (input.tags?.length) setTags(existing.id, input.tags);
-          return get<Sighting>("SELECT * FROM sightings WHERE id = ?", existing.id)!;
-        }
-        return existing;
-      }
-    }
-
-    const seenOn = input.seenOn ?? null;
-    const precision = input.datePrecision ?? (seenOn ? "day" : "unknown");
-    const result = run(
-      `INSERT INTO sightings (client_uuid, user_id, work_id, venue_id, exhibition_id,
-                              seen_on, date_precision, rating, review, private_note,
-                              photo_path, source, encounter, is_private)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      input.clientUuid ?? null,
-      input.userId,
-      input.workId,
-      input.venueId ?? null,
-      input.exhibitionId ?? null,
-      seenOn,
-      precision,
-      input.rating ?? null,
-      input.review?.trim() || null,
-      input.privateNote?.trim() || null,
-      input.photoPath ?? null,
-      input.source ?? "search",
-      input.encounter ?? "original",
-      input.isPrivate ? 1 : 0,
-    );
-    const id = Number(result.lastInsertRowid);
-    setTags(id, input.tags ?? []);
-
-    // A sighting of the original is evidence about where the work is; a
-    // sighting of a reproduction is evidence about nothing (R2).
-    if ((input.encounter ?? "original") === "original") {
-      const before = openDisplayId(input.workId, input.venueId ?? null);
-      assertDisplay(db(), {
-        workId: input.workId,
-        venueId: input.venueId ?? null,
-        seenOn,
-        exhibitionId: input.exhibitionId ?? null,
-      });
-      if (!before && input.venueId && seenOn) {
-        notifyWatchers(input.workId, input.venueId, input.userId);
-      }
-    }
-
-    return get<Sighting>("SELECT * FROM sightings WHERE id = ?", id)!;
-  });
-}
-
-function openDisplayId(workId: number, venueId: number | null): number | null {
-  if (!venueId) return null;
-  const row = get<{ id: number }>(
-    "SELECT id FROM displays WHERE work_id = ? AND venue_id = ? AND ended_on IS NULL",
-    workId,
-    venueId,
-  );
-  return row?.id ?? null;
-}
-
-/**
- * "A work on your watchlist has gone on display near you."
- *
- * Near you is the launch city, not a radius: the whole point of §4's
- * single-city bet is that everyone in the graph shares a catalogue.
- */
-function notifyWatchers(workId: number, venueId: number, actorId: number) {
-  const work = get<{ title: string; slug: string }>(
-    "SELECT title, slug FROM works WHERE id = ?",
-    workId,
-  );
-  const venue = get<{ name: string; city: string }>(
-    "SELECT name, city FROM venues WHERE id = ?",
-    venueId,
-  );
-  if (!work || !venue) return;
-
-  const watchers = all<{ user_id: number }>(
-    `SELECT w.user_id FROM watchlist w
-       JOIN users u ON u.id = w.user_id
-      WHERE w.work_id = ? AND u.id <> ?
-        AND (u.home_city IS NULL OR u.home_city = ?)`,
-    workId,
-    actorId,
-    venue.city,
-  );
-  for (const watcher of watchers) {
-    run(
-      `INSERT INTO notifications (user_id, kind, body, href)
-       VALUES (?, 'watchlist_on_display', ?, ?)`,
-      watcher.user_id,
-      `${work.title} is on display at ${venue.name}.`,
-      `/work/${work.slug}`,
-    );
-  }
+  return transact(() => store.createSighting(db(), input) as Sighting);
 }
 
 export function setTags(sightingId: number, tags: string[]) {
-  run("DELETE FROM sighting_tags WHERE sighting_id = ?", sightingId);
-  const seen = new Set<string>();
-  for (const raw of tags) {
-    const tag = normalizeTag(raw);
-    if (!tag || seen.has(tag)) continue;
-    seen.add(tag);
-    run("INSERT OR IGNORE INTO sighting_tags (sighting_id, tag) VALUES (?, ?)", sightingId, tag);
-  }
+  store.setTags(db(), sightingId, tags);
 }
 
 export function updateSighting(
