@@ -1,9 +1,27 @@
 name: CI
 
+# ---------------------------------------------------------------------------
+# Manual trigger only, deliberately.
+#
+# GitHub Actions cannot currently start a runner in this repository: two runs
+# on PR #1 were created and failed ~3 seconds later having executed no step at
+# all, which is a runner/billing condition rather than anything in the
+# workflow. Left on `pull_request`, that puts a permanent red X on every pull
+# request and teaches everyone to ignore the checks — worse than no CI.
+#
+# TO RE-ENABLE once Actions can run here: uncomment the `pull_request` and
+# `push` triggers below. Nothing else needs to change; the job itself has never
+# been the problem.
+#
+# Until then the same sequence runs locally as `npm run check` (typecheck,
+# tests, build) and `npm run verify` (the above plus a seeded database and the
+# §13 metric gates). `npm run verify` is what a release should be cut from.
+# ---------------------------------------------------------------------------
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  # pull_request:
 
 jobs:
   check:

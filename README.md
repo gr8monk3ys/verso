@@ -157,6 +157,25 @@ claim.
 
 ---
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs the whole sequence — typecheck, tests, build,
+then a seeded database and the metric gates — but is currently set to
+`workflow_dispatch` only. GitHub Actions cannot start a runner in this
+repository: runs are created and fail about three seconds later having executed
+no step, which is a runner or billing condition rather than anything in the
+workflow. Left on `pull_request` it would put a permanent red X on every PR,
+which teaches people to ignore the checks.
+
+**To re-enable:** uncomment the `pull_request` and `push` triggers at the top of
+the file. Nothing else changes.
+
+Until then, `npm run verify` is the same sequence locally, and the guardrail
+still exits non-zero — §13 says recognition accuracy under 95% means stop
+feature work, and a check that stops nothing isn't a guardrail.
+
+---
+
 ## Metrics
 
 ```
@@ -177,7 +196,8 @@ nothing isn't a guardrail. Put it in CI.
 | `npm run dev` / `build` / `start` | the app |
 | `npm test` | 59 tests, no network, no fixtures on disk |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run check` | typecheck + tests |
+| `npm run check` | typecheck + tests + build |
+| `npm run verify` | `check` plus a seeded database and the metric gates — what a release is cut from |
 | `npm run db:reset` / `db:seed` / `db:demo` | database lifecycle |
 | `npm run ingest:met` / `ingest:aic` / `reconcile` | catalogue pipeline |
 | `npm run metrics` | the gates |
