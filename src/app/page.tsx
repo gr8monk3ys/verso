@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { currentUser } from "@/lib/auth/session";
-import { feedForUser, likedByUser, recordEvent, suggestedUsers } from "@/lib/domain/social";
+import {
+  feedForUser,
+  likedByUser,
+  recordEventOncePerWindow,
+  suggestedUsers,
+} from "@/lib/domain/social";
 import { catalogueStats } from "@/lib/domain/stats";
 import { unratedCount } from "@/lib/domain/sightings";
 import { activeVenues, currentExhibitions } from "@/lib/domain/venues";
@@ -16,8 +21,10 @@ export default async function HomePage() {
   const user = await currentUser();
   if (!user) return <Landing />;
 
-  // The V1 gate measures feed opens; measuring it is the whole point (§13).
-  recordEvent(user.id, "feed_open");
+  // The V1 gate measures feed opens. Deduplicated per half hour so it counts
+  // openings rather than renders — this page is dynamic, and prefetches and
+  // back-navigations would otherwise inflate it (§13).
+  recordEventOncePerWindow(user.id, "feed_open");
 
   const feed = feedForUser(user.id, { limit: 40 });
   const liked = likedByUser(

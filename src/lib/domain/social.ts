@@ -222,6 +222,33 @@ export function recordEvent(userId: number | null, kind: string, meta?: unknown)
   );
 }
 
+/**
+ * Record an event at most once per user per window.
+ *
+ * The feed is server-rendered on every request, so a naive insert counts
+ * prefetches, back-navigations and refreshes as feed opens — and the V1 gate
+ * (§13) asks how often people *open* the feed, not how many times React asked
+ * the server for it. Thirty minutes is the session boundary: coming back after
+ * lunch is a second open, scrolling back up is not.
+ */
+export function recordEventOncePerWindow(
+  userId: number,
+  kind: string,
+  windowMinutes = 30,
+): boolean {
+  const recent = get(
+    `SELECT 1 FROM events
+      WHERE user_id = ? AND kind = ? AND at > datetime('now', ?)
+      LIMIT 1`,
+    userId,
+    kind,
+    `-${windowMinutes} minutes`,
+  );
+  if (recent) return false;
+  recordEvent(userId, kind);
+  return true;
+}
+
 export function userByHandle(handle: string) {
   return get<{
     id: number;

@@ -4,14 +4,20 @@ import { currentUser, listDemoUsers } from "@/lib/auth/session";
 import { AuthForm } from "@/components/AuthForm";
 import { signInAction } from "@/app/actions";
 
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   if (await currentUser()) redirect("/");
+  const { next } = await searchParams;
   const demoUsers = listDemoUsers();
 
   return (
     <div className="mx-auto max-w-sm pt-8">
       <h1 className="display text-3xl">Sign in</h1>
       <AuthForm action={signInAction} submitLabel="Sign in">
+        {typeof next === "string" && <input type="hidden" name="next" value={next} />}
         <label className="block">
           <span className="label-caps">Handle or email</span>
           <input name="identifier" className="field mt-1" autoCapitalize="none" required />

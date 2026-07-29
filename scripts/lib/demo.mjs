@@ -248,6 +248,11 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
       summary.users++;
     }
 
+    // One demo account can see /internal, so the gate pages and the
+    // institutional dashboards are reachable in a demo without handing them to
+    // everyone who signs up.
+    db.prepare("UPDATE users SET is_staff = 1 WHERE handle = 'priya'").run();
+
     const insertFollow = db.prepare(
       "INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)",
     );

@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { applySchema } from "@/lib/db/migrate.mjs";
 
 export type Row = Record<string, unknown>;
 
@@ -16,7 +17,7 @@ declare global {
 
 function open(): DatabaseSync {
   const db = new DatabaseSync(DB_PATH);
-  db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+  applySchema(db, readFileSync(SCHEMA_PATH, "utf8"));
   return db;
 }
 

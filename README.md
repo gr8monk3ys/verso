@@ -19,7 +19,8 @@ npm run dev                                 # http://localhost:3000
 
 The seeded catalogue is committed (`data/seed/met-catalogue.ndjson.gz`, 908 KB),
 so the ingest step is optional — `db:seed` works straight from a fresh clone.
-Demo accounts all use the password `verso-demo`; start with `@priya`.
+Demo accounts all use the password `verso-demo`; start with `@priya`, who is
+also the demo's staff account and can reach `/internal`.
 
 ---
 
@@ -174,7 +175,7 @@ nothing isn't a guardrail. Put it in CI.
 | | |
 |---|---|
 | `npm run dev` / `build` / `start` | the app |
-| `npm test` | 49 tests, no network, no fixtures on disk |
+| `npm test` | 59 tests, no network, no fixtures on disk |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run check` | typecheck + tests |
 | `npm run db:reset` / `db:seed` / `db:demo` | database lifecycle |
@@ -185,25 +186,63 @@ nothing isn't a guardrail. Put it in CI.
 
 ---
 
+## Running it in production
+
+```
+VERSO_DB_PATH=/var/lib/verso/verso.db \
+VERSO_STAFF_BOOTSTRAP=your-handle \
+NODE_ENV=production npm run build && npm start
+```
+
+| Variable | Purpose |
+|---|---|
+| `VERSO_DB_PATH` | SQLite file location (default `data/verso.db`) |
+| `VERSO_STAFF_BOOTSTRAP` | Handle promoted to staff on boot — the only way to get the first `/internal` login without a database client |
+| `VERSO_RECOGNITION` | `gallery-prior` (default), `http`, or `none` |
+| `VERSO_RECOGNITION_URL` / `_KEY` | Endpoint and bearer token for the `http` provider |
+
+`/api/health` returns 200 with the catalogue size, or 503 if the database is
+unreachable — point the load balancer at it rather than at `/`, which is 200
+even when queries are failing.
+
+**Access control.** Everything under `/internal` — the metric gates, the
+reconciliation queue, the institutional dashboards — is staff-only. Signed-out
+visitors are sent to sign in; signed-in non-staff get a 404 rather than a 403,
+so the pages aren't confirmed to exist. The server actions behind the
+reconciliation queue repeat the check, because guarding a page hides a button
+and does not close an endpoint.
+
+**Back up the database file.** `data/verso.db` is the entire product: the
+catalogue can be rebuilt from the Met in fifteen seconds, but the sightings
+cannot be rebuilt from anything. WAL mode means backing up needs
+`sqlite3 verso.db ".backup"` rather than a file copy.
+
+---
+
 ## What this build does not do
 
 Stated plainly, because a prototype that pretends otherwise wastes the next
 person's afternoon:
 
-- **`/internal/*` is unauthenticated.** Fine for a single-operator prototype,
-  not fine once the database contains anybody real. Put it behind staff auth.
-- **No real recognition model.** The default provider ranks what is on the wall;
-  it does not look at pixels. The `http` provider is the seam for a real one.
+- **No Content-Security-Policy.** The App Router injects inline bootstrap
+  scripts, so a real CSP needs per-request nonces threaded through middleware;
+  a CSP with `unsafe-inline` would be decoration. The other security headers
+  are set. This is the first follow-up.
+- **No real recognition model.** The default provider ranks what is on the wall
+  in the room you're in; it does not look at pixels. The `http` provider is the
+  seam for a real one.
 - **One city, two venues.** New York, because that is where the open on-view
   data is. §14's second question — which city — is answered by data
   availability here, not by market analysis; see `docs/DECISIONS.md`.
 - **Exhibitions are demo data.** No listings feed is ingested. Exhibition pages
   work; the content behind them is synthetic.
-- **No email.** Notifications are in-app only.
-- **SQLite, single process.** Correct for this scale and wrong for a real
-  launch; the query layer is small enough to port.
-
----
+- **No email.** Notifications are in-app only, so a watchlist alert is only
+  seen next time the user opens the app.
+- **Rate limiting is per process.** Correct scope for a single-process SQLite
+  deployment, and the thing to move to shared storage on the same day the
+  database moves.
+- **SQLite, single process.** Right for this scale and wrong for a real launch.
+  The query layer is small and has no ORM to unpick.
 
 ## Licence
 

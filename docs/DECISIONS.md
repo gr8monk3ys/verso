@@ -179,6 +179,23 @@ points, no streaks, no badges and no leaderboards. The only counters are
 factual — works seen, days out, times revisited — and reviews are never ranked
 by anything except likes.
 
+### /internal is staff-only, and staff is granted by a person
+
+The metric gates, the reconciliation queue and the institutional dashboards are
+gated on a `users.is_staff` flag that signing up cannot set. The only bootstrap
+is `VERSO_STAFF_BOOTSTRAP`, which promotes one named handle on boot. Non-staff
+get a 404 rather than a 403, so the pages are not confirmed to exist, and the
+reconciliation server actions repeat the check — guarding a page hides a button
+and does not close an endpoint.
+
+### Feed opens are deduplicated before they count
+
+The feed is server-rendered on every request, so counting an event per render
+would have made the §13 feed-open metric measure prefetches and
+back-navigations. It is deduplicated to one event per user per thirty minutes:
+coming back after lunch is a second open, scrolling back up is not. A gate is
+only worth having if the number under it means what its name says.
+
 ### The feed sorts reviews above bare logs
 
 Within a day, sightings carrying a review sort above those carrying a rating,

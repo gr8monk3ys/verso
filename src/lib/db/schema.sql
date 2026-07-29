@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS users (
   home_city     TEXT,
   -- Private profiles keep sightings out of the public feed entirely.
   is_private    INTEGER NOT NULL DEFAULT 0,
+  -- Access to /internal: the metric gates, the reconciliation queue and the
+  -- institutional dashboards. Granted by a person, never by signing up.
+  is_staff      INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

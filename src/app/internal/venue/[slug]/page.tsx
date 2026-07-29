@@ -12,6 +12,7 @@ import {
 } from "@/lib/domain/institutional.mjs";
 import { Stars } from "@/components/Stars";
 import { displayArtist, pluralize } from "@/lib/format";
+import { requireStaff } from "@/lib/auth/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function VenueDashboard({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  await requireStaff();
   const { slug } = await params;
   const venue = venueBySlug(slug);
   if (!venue) notFound();

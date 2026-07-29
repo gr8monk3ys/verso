@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { activeVenues } from "@/lib/domain/venues";
+import { requireStaff } from "@/lib/auth/staff";
 
 export const dynamic = "force-dynamic";
 
 export default async function InternalIndex() {
+  await requireStaff();
   const venues = activeVenues();
 
   return (

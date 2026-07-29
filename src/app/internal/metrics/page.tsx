@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { computeMetrics } from "@/lib/domain/metrics.mjs";
+import { requireStaff } from "@/lib/auth/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function MetricsPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  await requireStaff();
   const { window: windowParam } = await searchParams;
   const windowDays = Number(windowParam ?? 90) || 90;
   const metrics = computeMetrics(db(), { windowDays });

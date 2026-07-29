@@ -24,6 +24,7 @@ import {
 import { addToList, createList, deleteList, removeFromList, toggleWatch } from "@/lib/domain/lists";
 import { recordRecognition } from "@/lib/recognition";
 import { get } from "@/lib/db";
+import { checkRateLimit, clearRateLimit } from "@/lib/rate-limit.mjs";
 
 async function actor() {
   const user = await currentUser();
@@ -40,16 +41,34 @@ function emptyToNull(value: FormDataEntryValue | null): string | null {
 
 export type AuthState = { error?: string } | undefined;
 
+/**
+ * Only same-origin relative paths are honoured as a post-sign-in destination.
+ * An open redirect on a login form is how phishing gets a legitimate domain in
+ * the address bar.
+ */
+function safeNext(value: FormDataEntryValue | null): string | null {
+  const next = String(value ?? "");
+  return /^\/(?!\/)[\w\-./?=&%]*$/.test(next) ? next : null;
+}
+
 export async function signInAction(_state: AuthState, formData: FormData): Promise<AuthState> {
   const identifier = String(formData.get("identifier") ?? "");
   const password = String(formData.get("password") ?? "");
+
+  const limit = checkRateLimit(`signin:${identifier.trim().toLowerCase()}`);
+  if (!limit.ok) return { error: limit.error };
+
   const result = authenticate(identifier, password);
   if (!result.ok) return { error: result.error };
+  clearRateLimit(`signin:${identifier.trim().toLowerCase()}`);
   await setSessionCookie(createSession(result.userId));
-  redirect("/");
+  redirect(safeNext(formData.get("next")) ?? "/");
 }
 
 export async function signUpAction(_state: AuthState, formData: FormData): Promise<AuthState> {
+  const limit = checkRateLimit("signup");
+  if (!limit.ok) return { error: limit.error };
+
   const result = registerUser({
     handle: String(formData.get("handle") ?? ""),
     displayName: String(formData.get("display_name") ?? ""),

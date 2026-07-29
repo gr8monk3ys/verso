@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { applySchema } from "../../src/lib/db/migrate.mjs";
 
 export const DB_PATH = process.env.VERSO_DB_PATH ?? path.join("data", "verso.db");
 const SCHEMA_PATH = path.join("src", "lib", "db", "schema.sql");
@@ -8,7 +9,7 @@ const SCHEMA_PATH = path.join("src", "lib", "db", "schema.sql");
 export function openDb(dbPath = DB_PATH) {
   if (dbPath !== ":memory:") mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
-  db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+  applySchema(db, readFileSync(SCHEMA_PATH, "utf8"));
   return db;
 }
 

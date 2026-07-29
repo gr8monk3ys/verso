@@ -1,5 +1,6 @@
 import { all, get } from "@/lib/db";
 import { acceptCandidateAction, rejectCandidateAction } from "@/app/internal/reconciliation/actions";
+import { requireStaff } from "@/lib/auth/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export const dynamic = "force-dynamic";
  * notices.
  */
 export default async function ReconciliationPage() {
+  await requireStaff();
   const counts = get<{
     matched: number;
     unreconciled: number;
