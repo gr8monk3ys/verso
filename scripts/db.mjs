@@ -16,6 +16,7 @@ import path from "node:path";
 import { openDb, transact, DB_PATH } from "./lib/db.mjs";
 import { slugify } from "../src/lib/text.mjs";
 import { seedDemo } from "./lib/demo.mjs";
+import { flagDuplicateQids } from "../src/lib/domain/reconciliation.mjs";
 
 const SEED_DIR = path.join("data", "seed");
 const VENUES = path.join(SEED_DIR, "venues.json");
@@ -199,8 +200,21 @@ async function main() {
       `venues ${venues} · works +${result.inserted} (skipped ${result.skipped}) · ` +
         `displays +${result.displays} · catalogue ${total}`,
     );
+    // The museum's own Wikidata links are an assertion, not a proof. Where one
+    // Q-number arrives on two objects, both rows go to the human queue rather
+    // than one of them silently winning.
+    const duplicates = flagDuplicateQids(db);
+    if (duplicates.flagged) {
+      console.log(
+        `conflicted ${duplicates.flagged} works across ${duplicates.qids.length} ` +
+          `duplicated Q-numbers (${duplicates.qids.join(", ")}) → /internal/reconciliation`,
+      );
+    }
   } else if (command === "demo") {
     const summary = seedDemo(db);
+    // Mark the dataset as generated, so the metric gates can say so instead of
+    // reporting a PASS that reads like evidence about real users.
+    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('dataset', 'demo')").run();
     console.log(
       Object.entries(summary)
         .map(([key, value]) => `${key} ${value}`)

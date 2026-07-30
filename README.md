@@ -86,7 +86,7 @@ than assuming it — see [Metrics](#metrics).
 - Catalogue ingest from The Met and the Art Institute of Chicago
 - Wikidata reconciliation with a human review queue
 - Crowdsourced "on view" inference — sightings become display evidence
-- Live metric gates and a recognition guardrail
+- Live metric gates, and a catalogue guardrail measured against real ground truth
 - Institutional analytics under a k-anonymity floor
 
 ---
@@ -151,19 +151,34 @@ Verso ships with the decision thresholds from the PRD computed live, at
 npm run metrics
 ```
 
-```
-V0 gate — PASS
-  median works / active user / month             15.5   PASS (≥ 8)
-  30-day retention (logged in week 5)           37.5%   PASS (≥ 25.0%)
-  users logging on >1 day                      100.0%   PASS (≥ 40.0%)
+Two kinds of number, kept apart on purpose.
 
-Guardrail — PASS
-  recognition accuracy (n=1533)                 97.6%   PASS (≥ 95.0%)
+**The V0 and V1 gates describe users, and there are none.** On a seeded database
+they are computed from the personas in `scripts/lib/demo.mjs`, which are tuned to
+clear these thresholds — so `npm run metrics` prints a `GENERATED DATA` banner
+above them and the JSON carries `"dataset": "demo"`. They verify that the
+instrument works. They are not evidence about a product.
+
+**The guardrail describes the catalogue, and that is real.** The Met publishes its
+own Wikidata Q-number for each object, so the reconciler can be graded against
+ground truth: run it over real works, ask live Wikidata for candidates, and
+compare what it committed to against what the museum says.
+
+```bash
+npm run eval:catalogue          # live, a few minutes against WDQS
+npm run eval:catalogue:replay   # regrade the committed run, no network
 ```
 
-The guardrail exits non-zero. Catalogue match accuracy under 95% is defined as
-"stop feature work and fix the catalogue", and a check that stops nothing is not
-a guardrail.
+The result is committed to `data/eval/reconciliation.json` — a guardrail is only a
+guardrail if it is present on a fresh clone — and `npm run metrics` gates on it.
+An **unmeasured** guardrail fails rather than passing quietly: absence of evidence
+must not read as evidence.
+
+Recognition acceptance still gets reported, below the gates, labelled as
+telemetry. It used to be the guardrail, which was a mistake: it is computed from
+`recognition_events`, and on demo data those come from a hardcoded acceptance rate
+in the seeder, so the check could not fail. It becomes meaningful the day real
+people are tapping suggestions.
 
 ---
 

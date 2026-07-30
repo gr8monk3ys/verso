@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { db, get, run } from "@/lib/db";
+import { all, db, get, run } from "@/lib/db";
+import { deleteMedia } from "@/lib/media";
 import { currentUser, endSession, createSession, setSessionCookie } from "@/lib/auth/session";
 import { hashPassword, verifyPassword } from "@/lib/auth/password.mjs";
 import { createResetToken, consumeResetToken } from "@/lib/auth/reset.mjs";
@@ -123,7 +124,16 @@ export async function deleteAccountAction(
     return { error: "That password doesn't match." };
   }
 
+  // Collected before the cascade takes the rows that name them: photographs live
+  // on disk, and only the sighting rows know which files were theirs.
+  const photos = all<{ photo_path: string }>(
+    "SELECT photo_path FROM sightings WHERE user_id = ? AND photo_path IS NOT NULL",
+    user.id,
+  );
+
   run("DELETE FROM users WHERE id = ?", user.id);
+  await Promise.all(photos.map((row) => deleteMedia(row.photo_path)));
+
   await endSession();
   redirect("/?deleted=1");
 }

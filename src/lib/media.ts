@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -17,8 +17,10 @@ import path from "node:path";
  *
  * Storage is the local filesystem under VERSO_MEDIA_DIR, served back through a
  * route handler rather than from public/. That keeps uploads out of the build
- * output, survives a redeploy, and leaves one place to add an authorisation
- * check if private sightings ever need private photos.
+ * output and survives a redeploy. The route is the one authorisation point:
+ * photographs inherit the visibility of the sighting that owns them, because a
+ * random filename is a secret that only has to leak once, and these URLs are
+ * served immutable.
  */
 
 const MEDIA_DIR = process.env.VERSO_MEDIA_DIR ?? path.join(process.cwd(), "data", "media");
@@ -97,6 +99,22 @@ export async function readMedia(
     return { bytes, mime: kind.mime };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Remove a stored photo. Resolved through the same root check as reading, so a
+ * stored path that has been tampered with can never delete outside MEDIA_DIR.
+ * Missing files are not an error — deletion is meant to be idempotent.
+ */
+export async function deleteMedia(relative: string): Promise<void> {
+  const target = path.resolve(MEDIA_DIR, relative);
+  const root = path.resolve(MEDIA_DIR);
+  if (target !== root && !target.startsWith(root + path.sep)) return;
+  try {
+    await unlink(target);
+  } catch {
+    // Already gone, or never written. Either way there is nothing to serve.
   }
 }
 

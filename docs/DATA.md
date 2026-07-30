@@ -90,6 +90,83 @@ The asymmetry is deliberate. A missed match leaves two catalogue rows a human
 can join later. A wrong match silently pools two different paintings' reviews
 and is close to undetectable afterwards.
 
+### The reconciler, graded against ground truth
+
+`npm run eval:catalogue` runs the shipped decision rule over real works, asks live
+Wikidata for candidates, and compares what the machine committed to on its own
+against the Q-number the Met publishes for that object. Read-only; the summary is
+committed to `data/eval/reconciliation.json` and `npm run metrics` gates on it.
+
+Two arms, answering different questions:
+
+| | precision | coverage | |
+|---|---|---|---|
+| **accession → label** (as shipped) | **100%** | 99.2% | n=120 |
+| **label only** (accession withheld) | **100%** | 7.5% | n=40 |
+
+Precision is what it got right out of what it decided alone. Coverage is what it
+both decided *and* got right, out of everything sampled.
+
+The shape of that table is the intended asymmetry, confirmed rather than assumed:
+**the matcher is precise and shy.** On the fuzzy path it declined 35 of 40 rather
+than guess, and of the 2 it sent to review the correct answer was among the
+candidates both times. It never made the expensive mistake — a wrong merge that
+pools two objects' reviews forever — it just declined, which is a missed match a
+human can still join later.
+
+Coverage on the label arm splits hard by attribution: **15% for works with a named
+artist, 0% for anonymous ones.** That is not a tuning problem, it is the artist
+gate meeting an encyclopedic collection — see below.
+
+### Ground truth is not automatically true
+
+The evaluation found a defect in the catalogue rather than in the matcher. Three
+Q-numbers in the committed seed are assigned to **two different works each**.
+One is in the sample:
+
+```
+work 2461 · Robert Fulton (1765–1815) · Jean Antoine Houdon
+    catalogue says Q55622989 (shared by 2 works), matcher found Q55622810
+```
+
+Checked against Wikidata directly: `Q55622989` is *Samuel Bernard (1651–1739)*,
+inventory `66.210a–c`. `Q55622810` is *Robert Fulton*, inventory `1989.329`. The
+matcher was right and the answer key was wrong.
+
+Two catalogue rows pointing at one Wikidata item is exactly the pooled-reviews
+failure the thresholds exist to prevent — arriving from the source rather than
+from a bad match, which is why nothing upstream caught it. Such cases are counted
+as `groundTruthConflict`, named in the report, and excluded from the precision
+denominator: scoring them either way would mean inventing an answer key.
+
+### 62% of the on-view catalogue has no named artist
+
+Measured, not assumed — of the 9,971 works carrying ground truth:
+
+| | works | share |
+|---|---|---|
+| Named artist | 3,765 | 37.8% |
+| Anonymous | 6,206 | **62.2%** |
+| Has a begin date | 9,948 | 99.8% |
+
+This is not a data-quality problem, it is what an encyclopedic museum's galleries
+contain: Greek and Roman marbles, Egyptian funerary objects, arms and armour, and
+textiles, none of which have a creator to attribute.
+
+It has a direct consequence for the table above. `scoreCandidate` requires
+**both** title *and* artist similarity ≥ 0.60 before anything else is considered,
+so for those 6,206 works the fuzzy path cannot clear the floor however exact the
+title match is — they are reachable by accession number alone. The Met publishes
+accession-linked Q-numbers, so the launch catalogue is fine. **Any source that
+does not, is not**: the AIC adapter returns no Q-numbers at all
+(verified against the live API), which means roughly two thirds of an AIC ingest
+has no automatic path to a match and no fuzzy fallback either.
+
+Fixing that means giving the scorer corroborating signals that survive anonymity
+— medium, culture, department, dimensions, date — rather than loosening the
+artist gate, which would trade silent wrong merges for coverage. It is the
+highest-value item in `ROADMAP.md` for a second venue.
+
 ```bash
 node scripts/ingest/reconcile.mjs --limit 500   # needs the Wikidata endpoint
 node scripts/ingest/reconcile.mjs --queue       # what's waiting for a person

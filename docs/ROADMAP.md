@@ -8,6 +8,41 @@ person's week.
 
 ## Before a public launch
 
+### A scorer that works on anonymous objects
+`scoreCandidate` needs title **and** artist similarity ≥ 0.60 before it considers
+anything else, and 62.2% of the on-view catalogue has no named artist (measured —
+see `DATA.md`). Those works are matchable by accession number alone.
+
+That is survivable for the Met, which publishes accession-linked Q-numbers. It is
+not survivable for the second venue: the AIC adapter returns **no Q-numbers at
+all**, so about two thirds of an AIC ingest would have no automatic path and no
+fuzzy fallback. The fix is corroborating signals that survive anonymity — medium,
+culture, department, dimensions, date — not a looser artist gate, which would buy
+coverage with silent wrong merges. Measure any change with
+`npm run eval:catalogue`, which grades against the museum's own Q-numbers.
+
+### `client_uuid` should be unique per user, not globally
+The offline queue mints `client_uuid` on the device, so it arrives as untrusted
+input. `createSighting` now refuses a uuid already owned by another account, which
+closes the hole, but the column is still declared `TEXT UNIQUE` — a global
+constraint for a value that is only ever meaningful per user. The honest schema is
+`UNIQUE(user_id, client_uuid)`.
+
+That is a table rebuild: the constraint is inline, so its implicit index cannot be
+dropped, and `migrate.mjs` is deliberately additive-only. It needs a real
+migration written by hand, not an entry in `ADDED_COLUMNS`.
+
+### Continuous integration that actually runs
+`.github/workflows/ci.yml` is `workflow_dispatch`-only because Actions cannot
+start a runner here — two runs on PR #1 failed in ~4 seconds having executed no
+step, which is the exhausted-minutes signature on a private repo sharing the
+free-plan pool. The job itself has never been the problem.
+
+Public repositories get unlimited Actions. This one is GPL-3.0 with a CC0
+catalogue and no secrets, so making it public re-enables CI for free: uncomment
+the `pull_request` trigger, change nothing else. Until then `npm run verify` is
+the gate and it only runs when somebody remembers.
+
 ### Native apps for iOS and Android
 Verso is an installable PWA today — home-screen icon, standalone window,
 camera, offline queue, app shortcuts. What it is not is *in a store*, and a

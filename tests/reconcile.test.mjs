@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileWorks } from "../scripts/ingest/reconcile.mjs";
 import { fixtureProvider } from "../scripts/ingest/wikidata.mjs";
-import { acceptCandidate, rejectCandidate } from "../src/lib/domain/reconciliation.mjs";
+import {
+  acceptCandidate,
+  flagDuplicateQids,
+  rejectCandidate,
+} from "../src/lib/domain/reconciliation.mjs";
 import { addWork, testDb } from "./helpers.mjs";
 
 test("an accession-number hit is applied without asking anyone", async () => {
@@ -164,4 +168,47 @@ test("already-reconciled works are not re-examined", async () => {
   addWork(db, "harvesters", { title: "The Harvesters", qid: "Q1123302", status: "matched" });
   const stats = await reconcileWorks(db, fixtureProvider([]));
   assert.equal(stats.examined, 0);
+});
+
+// --------------------------------------------------- duplicated Q-numbers ---
+
+test("one Q-number on two works sends both to the human queue", () => {
+  // Found by grading the reconciler against the Met's own links: three Q-numbers
+  // in the committed catalogue are assigned to two objects each. A Q-number
+  // identifies one physical work, so this is the pooled-reviews failure arriving
+  // from the source — and the scoring path never sees it.
+  const db = testDb();
+  const a = addWork(db, "samuel-bernard", { title: "Samuel Bernard" });
+  const b = addWork(db, "robert-fulton", { title: "Robert Fulton" });
+  const c = addWork(db, "unaffected", { title: "Unaffected" });
+  const set = db.prepare(
+    "UPDATE works SET wikidata_qid = ?, catalogue_status = 'matched' WHERE id = ?",
+  );
+  set.run("Q55622989", a);
+  set.run("Q55622989", b);
+  set.run("Q7761325", c);
+
+  const result = flagDuplicateQids(db);
+
+  assert.equal(result.flagged, 2, "both claimants are flagged, not one");
+  assert.deepEqual(result.qids, ["Q55622989"]);
+  const status = (id) =>
+    db.prepare("SELECT catalogue_status FROM works WHERE id = ?").get(id).catalogue_status;
+  assert.equal(status(a), "conflicted");
+  assert.equal(status(b), "conflicted");
+  assert.equal(status(c), "matched", "a unique Q-number is left alone");
+
+  // Neither row loses its identifier: which one keeps it is a human's call, and
+  // guessing between two real objects is what the thresholds forbid.
+  const kept = db
+    .prepare("SELECT COUNT(*) AS n FROM works WHERE wikidata_qid = 'Q55622989'")
+    .get().n;
+  assert.equal(kept, 2);
+});
+
+test("flagging duplicates is idempotent and quiet when there are none", () => {
+  const db = testDb();
+  const only = addWork(db, "solo");
+  db.prepare("UPDATE works SET wikidata_qid = 'Q1' WHERE id = ?").run(only);
+  assert.deepEqual(flagDuplicateQids(db), { flagged: 0, qids: [] });
 });

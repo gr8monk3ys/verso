@@ -86,22 +86,43 @@ export default async function MetricsPage({
         pass={verdict.guardrail.pass}
         rows={[
           [
-            `Recognition accuracy (n=${metrics.guardrail.recognitionSample})`,
-            pct(metrics.guardrail.recognitionAccuracy),
-            verdict.guardrail.checks.recognitionAccuracy,
+            metrics.guardrail.catalogueMatchAccuracy == null
+              ? "Catalogue match accuracy — not measured"
+              : `Catalogue match accuracy (n=${metrics.guardrail.catalogueSample})`,
+            pct(metrics.guardrail.catalogueMatchAccuracy),
+            verdict.guardrail.checks.catalogueMatchAccuracy,
             "95%",
           ],
         ]}
-        note="Share of confirmed captures where the user accepted the top suggestion.
-              Below the threshold, stop feature work and fix the catalogue — a review
-              corpus attached to the wrong painting is worse than no corpus."
+        note="The reconciler graded against ground truth: the Wikidata Q-number the Met
+              publishes for each object, compared with the match the machine committed to
+              on its own. Real data and it can fail — refresh with
+              scripts/eval-reconciliation.mjs. Below the threshold, stop feature work: a
+              review corpus attached to the wrong painting is worse than no corpus."
+      />
+
+      <Gate
+        title="Telemetry — reported, not gated"
+        pass
+        rows={[
+          [
+            `Recognition acceptance (n=${metrics.telemetry.recognitionSample})`,
+            pct(metrics.telemetry.recognitionAcceptance),
+            { pass: true },
+            "—",
+          ],
+        ]}
+        note="Share of confirmed captures where the user took the top suggestion. Only
+              means something once real people are tapping it; on demo data this is the
+              seeder's own acceptance constant read back, so it does not gate a release."
       />
     </div>
   );
 }
 
-function pct(value: number) {
-  return `${(value * 100).toFixed(1)}%`;
+/** null means the figure was never measured, which is not the same as zero. */
+function pct(value: number | null) {
+  return value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 }
 
 function Gate({

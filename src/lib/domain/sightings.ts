@@ -1,6 +1,7 @@
 import "server-only";
 import { all, db, get, run, transact } from "@/lib/db";
 import * as store from "@/lib/domain/sighting-store.mjs";
+import { deleteMedia } from "@/lib/media";
 
 export type SightingInput = {
   userId: number;
@@ -78,8 +79,9 @@ const CARD_SELECT = `
  * display inference and watchlist notification — lives in sighting-store.mjs
  * so the test suite can exercise it directly against an in-memory database.
  */
-export function createSighting(input: SightingInput): Sighting {
-  return transact(() => store.createSighting(db(), input) as Sighting);
+/** Null when clientUuid belongs to another account — see store.createSighting. */
+export function createSighting(input: SightingInput): Sighting | null {
+  return transact(() => store.createSighting(db(), input) as Sighting | null);
 }
 
 export function setTags(sightingId: number, tags: string[]) {
@@ -123,8 +125,47 @@ export function updateSighting(
   return get<Sighting>("SELECT * FROM sightings WHERE id = ?", id);
 }
 
+/**
+ * Delete a sighting and the photograph attached to it.
+ *
+ * The DB row goes by cascade; the file on disk does not, and "we deleted your
+ * diary entry but the photograph is still served at a stable public URL" is not
+ * what the button says. The unlink is best-effort and after the row: a file that
+ * outlives its row is a leak, but a row pointing at a missing file is a 404.
+ */
 export function deleteSighting(id: number, userId: number) {
+  const owned = get<{ photo_path: string | null }>(
+    "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
+    id,
+    userId,
+  );
+  if (!owned) return;
   run("DELETE FROM sightings WHERE id = ? AND user_id = ?", id, userId);
+  if (owned.photo_path) void deleteMedia(owned.photo_path);
+}
+
+/**
+ * Who may fetch a stored photograph, resolved from the sighting that owns it.
+ *
+ * Photographs inherit the visibility of their sighting rather than relying on an
+ * unguessable filename: the URL is immutable and cacheable, so once it leaks it
+ * leaks permanently. An orphaned file — no row points at it — is visible to
+ * nobody, which is what makes deletion meaningful.
+ */
+export function photoViewer(
+  relativePath: string,
+): { ownerId: number; isPrivate: boolean } | null {
+  const row = get<{ user_id: number; is_private: number; owner_private: number }>(
+    `SELECT s.user_id, s.is_private, u.is_private AS owner_private
+       FROM sightings s JOIN users u ON u.id = s.user_id
+      WHERE s.photo_path = ?`,
+    relativePath,
+  );
+  if (!row) return null;
+  return {
+    ownerId: row.user_id,
+    isPrivate: Boolean(row.is_private || row.owner_private),
+  };
 }
 
 export function sightingById(id: number): SightingCard | undefined {

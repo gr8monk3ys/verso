@@ -6,7 +6,8 @@ import { applySchema } from "../src/lib/db/migrate.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { addUser, testDb } from "./helpers.mjs";
+import { addUser, addVenue, addWork, testDb } from "./helpers.mjs";
+import { createSighting } from "../src/lib/domain/sighting-store.mjs";
 
 const SCHEMA = readFileSync(path.join("src", "lib", "db", "schema.sql"), "utf8");
 
@@ -120,4 +121,62 @@ test("a private diary's sightings stay out of other people's views", () => {
   const shy = addUser(db, "shy", { isPrivate: true });
   const row = db.prepare("SELECT is_private FROM users WHERE id = ?").get(shy);
   assert.equal(row.is_private, 1);
+});
+
+// ---------------------------------------------------------- replay safety ---
+
+test("a replayed client_uuid belonging to someone else touches nothing", () => {
+  // The offline queue mints client_uuid on the device, so it arrives as
+  // attacker-controlled input on /api/sightings. Idempotency must therefore be
+  // scoped to the owner: a uuid is only ever a replay of *your* own capture.
+  const db = testDb();
+  const victim = addUser(db, "victim");
+  const attacker = addUser(db, "attacker");
+  const venue = addVenue(db, "met");
+  const work = addWork(db, "vermeer", { venueId: venue });
+
+  const original = createSighting(db, {
+    clientUuid: "shared-uuid", userId: victim, workId: work, venueId: venue,
+    seenOn: "2026-07-01", rating: 5, review: "The victim's own words.",
+    privateNote: "secret", isPrivate: true,
+  });
+
+  const replay = createSighting(db, {
+    clientUuid: "shared-uuid", userId: attacker, workId: work, venueId: venue,
+    seenOn: "2026-07-02", rating: 1, review: "overwritten",
+  });
+
+  assert.equal(replay, null, "a foreign uuid is refused rather than applied");
+
+  const after = db.prepare("SELECT * FROM sightings WHERE id = ?").get(original.id);
+  assert.equal(after.user_id, victim, "ownership is untouched");
+  assert.equal(after.rating, 5, "the rating is not overwritten");
+  assert.equal(after.review, "The victim's own words.", "the review is not overwritten");
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n,
+    1,
+    "and no row was created under the attacker either",
+  );
+});
+
+test("a replayed client_uuid of your own still carries a late rating", () => {
+  // The legitimate case the idempotency exists for: the capture screen offers a
+  // rating seconds after logging, and the queue may sync twice.
+  const db = testDb();
+  const user = addUser(db, "priya");
+  const venue = addVenue(db, "met");
+  const work = addWork(db, "vermeer", { venueId: venue });
+
+  const first = createSighting(db, {
+    clientUuid: "own-uuid", userId: user, workId: work, venueId: venue,
+    seenOn: "2026-07-01",
+  });
+  const second = createSighting(db, {
+    clientUuid: "own-uuid", userId: user, workId: work, venueId: venue,
+    seenOn: "2026-07-01", rating: 4,
+  });
+
+  assert.equal(second.id, first.id, "the same row comes back");
+  assert.equal(second.rating, 4, "and the late rating lands");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n, 1);
 });

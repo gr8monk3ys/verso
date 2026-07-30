@@ -397,3 +397,16 @@ CREATE TABLE IF NOT EXISTS work_requests (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_work_requests_status ON work_requests(status, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Provenance of the rows in this database.
+--
+-- The §13 gates are computed by SQL over whatever is in here, and `db:demo`
+-- generates behaviour from tuned personas — so on a seeded database the gates
+-- measure the generator's assumptions, not a product. That distinction is
+-- invisible in a PASS, so it is recorded here and printed by `npm run metrics`.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

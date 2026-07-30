@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { db, get, run } from "@/lib/db";
 import { currentUser } from "@/lib/auth/session";
 import { deleteSighting, updateSighting } from "@/lib/domain/sightings";
-import { saveSightingPhoto } from "@/lib/media";
+import { deleteMedia, saveSightingPhoto } from "@/lib/media";
 import { report } from "@/lib/domain/moderation.mjs";
 import { checkRateLimit } from "@/lib/rate-limit.mjs";
 
@@ -38,6 +38,17 @@ export async function editSightingAction(formData: FormData) {
     redirect(`/sighting/${id}/edit?error=${encodeURIComponent(photo.error)}`);
   }
 
+  // Whatever is on the sighting now is about to be replaced or cleared, and an
+  // unreferenced file would stay readable at its URL forever.
+  const replacing = Boolean(photo && "path" in photo) || formData.get("remove_photo") === "on";
+  const previous = replacing
+    ? get<{ photo_path: string | null }>(
+        "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
+        id,
+        user.id,
+      )?.photo_path
+    : null;
+
   const ratingRaw = emptyToNull(formData.get("rating"));
   updateSighting(id, user.id, {
     rating: ratingRaw == null ? null : Number(ratingRaw),
@@ -63,6 +74,9 @@ export async function editSightingAction(formData: FormData) {
   }
   if (formData.get("remove_photo") === "on") {
     run("UPDATE sightings SET photo_path = NULL WHERE id = ? AND user_id = ?", id, user.id);
+  }
+  if (previous && previous !== (photo && "path" in photo ? photo.path : null)) {
+    await deleteMedia(previous);
   }
   const venueId = emptyToNull(formData.get("venue_id"));
   run(
@@ -106,8 +120,19 @@ export async function attachPhotoAction(formData: FormData) {
   const id = Number(formData.get("sighting_id"));
 
   const photo = await saveSightingPhoto(formData.get("photo") as File | null);
+  // An oversized or non-image file used to fail silently here: the form posted,
+  // the page re-rendered unchanged, and nothing said why.
+  if (photo && "error" in photo) {
+    redirect(`/sighting/${id}?error=${encodeURIComponent(photo.error)}`);
+  }
   if (photo && "path" in photo) {
+    const previous = get<{ photo_path: string | null }>(
+      "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
+      id,
+      user.id,
+    )?.photo_path;
     run("UPDATE sightings SET photo_path = ? WHERE id = ? AND user_id = ?", photo.path, id, user.id);
+    if (previous && previous !== photo.path) await deleteMedia(previous);
   }
   revalidatePath(`/sighting/${id}`);
 }

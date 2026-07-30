@@ -68,3 +68,40 @@ export function rejectCandidate(db, candidateId) {
     ).run(candidate.work_id);
   }
 }
+
+/**
+ * Flag works whose Q-number the source gave to more than one object.
+ *
+ * A Q-number identifies one physical work, so two catalogue rows carrying the
+ * same one is the pooled-reviews failure the thresholds exist to prevent — except
+ * arriving from the museum's own data rather than from a bad match, which is why
+ * nothing in the scoring path catches it. Three such collisions are present in the
+ * committed Met catalogue; one was found by grading the reconciler against it.
+ *
+ * Deliberately does not pick a winner. Which row keeps the Q-number needs the
+ * accession number checked against Wikidata, and guessing between two real objects
+ * is exactly what §10.2 forbids a machine to do. Marking them `conflicted` puts
+ * them in the queue at /internal/reconciliation that a person already works.
+ *
+ * @returns {{flagged: number, qids: string[]}}
+ */
+export function flagDuplicateQids(db) {
+  const duplicates = db
+    .prepare(
+      `SELECT wikidata_qid FROM works
+        WHERE wikidata_qid IS NOT NULL
+        GROUP BY wikidata_qid HAVING COUNT(*) > 1`,
+    )
+    .all()
+    .map((row) => row.wikidata_qid);
+
+  if (!duplicates.length) return { flagged: 0, qids: [] };
+
+  const mark = db.prepare(
+    `UPDATE works SET catalogue_status = 'conflicted', updated_at = datetime('now')
+      WHERE wikidata_qid = ? AND catalogue_status <> 'conflicted'`,
+  );
+  let flagged = 0;
+  for (const qid of duplicates) flagged += mark.run(qid).changes;
+  return { flagged, qids: duplicates };
+}

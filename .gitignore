@@ -9,6 +9,10 @@ next-env.d.ts
 data/verso.db
 data/verso.db-*
 data/cache/
+
+# Uploaded photographs. VERSO_MEDIA_DIR defaults here, so without this a user's
+# camera roll ends up committed. public/uploads/ is the path nothing writes to.
+data/media/
 public/uploads/
 
 .env

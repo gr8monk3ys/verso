@@ -45,11 +45,20 @@ jobs:
 
       # The §13 guardrail: catalogue match accuracy below 95% means stop
       # feature work. `npm run metrics` exits non-zero when it fails, which is
-      # the only reason it counts as a guardrail rather than a chart. The
-      # reconciled catalogue is committed, so this needs no network.
+      # the only reason it counts as a guardrail rather than a chart.
+      #
+      # It reads data/eval/reconciliation.json — the reconciler graded against the
+      # Q-numbers the Met publishes for each object. That artifact is committed, so
+      # this needs no network, and a missing artifact fails rather than passing
+      # quietly. Refresh it deliberately with `npm run eval:catalogue` (hits WDQS).
       - name: Metric gates
         run: |
           npm run db:reset
           npm run db:seed
           npm run db:demo
           npm run metrics
+
+      # Regrade the committed evaluation from its cached candidate responses, so a
+      # scorer or threshold change that moves the guardrail cannot land unnoticed.
+      - name: Catalogue accuracy (replay, no network)
+        run: npm run eval:catalogue:replay

@@ -94,7 +94,13 @@ export async function logSightingAction(formData: FormData) {
     redirect(`/search?error=${encodeURIComponent(input.error)}`);
   }
 
-  createSighting({ ...input, userId: user.id });
+  if (!createSighting({ ...input, userId: user.id })) {
+    // client_uuid arrives on the form too, so this path needs the same refusal
+    // as the sync endpoint — and it has to say so rather than drop the log.
+    redirect(
+      `/search?error=${encodeURIComponent("That capture couldn't be saved. Try logging it again.")}`,
+    );
+  }
 
   // Recognition telemetry, when the capture screen supplied it (§13 guardrail).
   const rank = formData.get("recognition_rank");
