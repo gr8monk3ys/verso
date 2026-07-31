@@ -105,3 +105,79 @@ export function flagDuplicateQids(db) {
   for (const qid of duplicates) flagged += mark.run(qid).changes;
   return { flagged, qids: duplicates };
 }
+
+/**
+ * The works caught by flagDuplicateQids, grouped by the Q-number they contend for.
+ *
+ * Carries each row's accession number because that is the evidence the decision
+ * actually turns on: a Q-number's P217 inventory statement names exactly one
+ * object, so comparing it against each claimant's accession settles which row is
+ * the impostor. The one real case in the Met catalogue resolved that way — the
+ * Q-number's inventory was 66.210a–c, which is Samuel Bernard's, not Robert
+ * Fulton's.
+ */
+export function duplicateQidGroups(db) {
+  const rows = db
+    .prepare(
+      `SELECT w.wikidata_qid AS qid, w.id, w.slug, w.title, w.artist_display,
+              w.date_display, w.catalogue_status,
+              (SELECT value FROM work_identifiers i
+                WHERE i.work_id = w.id AND i.scheme LIKE '%accession' LIMIT 1) AS accession
+         FROM works w
+        WHERE w.wikidata_qid IN (
+                SELECT wikidata_qid FROM works
+                 WHERE wikidata_qid IS NOT NULL
+                 GROUP BY wikidata_qid HAVING COUNT(*) > 1)
+        ORDER BY w.wikidata_qid, w.id`,
+    )
+    .all();
+
+  const groups = new Map();
+  for (const row of rows) {
+    if (!groups.has(row.qid)) groups.set(row.qid, { qid: row.qid, works: [] });
+    groups.get(row.qid).works.push(row);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Settle a contested Q-number: one work keeps it, the others give it up.
+ *
+ * The losers are not deleted and not guessed at — they lose only the identifier
+ * they could not both hold, and go back to `unreconciled` so the normal pipeline
+ * can look for their real match. That keeps the §10.2 asymmetry intact: a missed
+ * match is recoverable, a wrong one silently pools two objects' reviews.
+ *
+ * @returns {{qid: string, kept: number, detached: number[]}}
+ */
+export function resolveQidConflict(db, keepWorkId) {
+  const keeper = db
+    .prepare("SELECT id, wikidata_qid FROM works WHERE id = ?")
+    .get(keepWorkId);
+  if (!keeper?.wikidata_qid) return { qid: null, kept: keepWorkId, detached: [] };
+
+  const rivals = db
+    .prepare("SELECT id FROM works WHERE wikidata_qid = ? AND id <> ?")
+    .all(keeper.wikidata_qid, keepWorkId)
+    .map((row) => row.id);
+
+  const clear = db.prepare(
+    `UPDATE works SET wikidata_qid = NULL, catalogue_status = 'unreconciled',
+                      updated_at = datetime('now')
+      WHERE id = ?`,
+  );
+  const dropIdentifier = db.prepare(
+    "DELETE FROM work_identifiers WHERE work_id = ? AND scheme = 'wikidata'",
+  );
+  for (const id of rivals) {
+    clear.run(id);
+    dropIdentifier.run(id);
+  }
+
+  db.prepare(
+    `UPDATE works SET catalogue_status = 'matched', updated_at = datetime('now')
+      WHERE id = ?`,
+  ).run(keepWorkId);
+
+  return { qid: keeper.wikidata_qid, kept: keepWorkId, detached: rivals };
+}

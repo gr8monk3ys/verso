@@ -60,6 +60,13 @@ The App Router injects inline bootstrap scripts, so a real CSP needs
 per-request nonces threaded through middleware. A CSP with `unsafe-inline`
 would be decoration. Every other security header is set.
 
+### Email delivery is configured but unproven for *your* vendor
+The transport seam and the preflight check exist: `npm run preflight` refuses a
+production boot with `VERSO_MAIL=log`, and `--send-test` puts a real message
+through whatever is configured. What is not done is choosing a vendor and pointing
+`VERSO_MAIL_WEBHOOK` at it. Until that is done and the test message arrives in a
+real inbox, a locked-out user cannot be recovered.
+
 ### Email beyond password reset
 Notifications are in-app only, so a watchlist alert — "the Vermeer you wanted is
 on the wall" — is only seen next time someone opens the app, which is precisely

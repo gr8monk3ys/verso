@@ -237,12 +237,14 @@ measurement rather than a claim.
 | | |
 |---|---|
 | `npm run dev` / `build` / `start` | the app |
-| `npm test` | 72 tests, no network, no fixtures on disk |
+| `npm test` | 102 tests, no network, no fixtures on disk |
 | `npm run check` | typecheck + tests + build |
 | `npm run verify` | `check` plus a seeded database and the metric gates |
 | `npm run db:reset` / `db:seed` / `db:demo` | database lifecycle |
 | `npm run ingest:met` / `ingest:aic` / `reconcile` | catalogue pipeline |
 | `npm run metrics` | the gates |
+| `npm run preflight` | is this safe to put strangers on? |
+| `npm run backup` / `backup:verify` / `backup:drill` | snapshot, checksum, rehearse a restore |
 
 ---
 
@@ -256,6 +258,24 @@ VERSO_STAFF_BOOTSTRAP=your-handle \
 NODE_ENV=production npm run build && npm start
 ```
 
+**Run `npm run preflight` first.** It checks the things that are fine on a laptop
+and lose users in production — mail that goes nowhere, no offsite backup, a demo
+dataset, a non-https origin — and exits non-zero if any of them would block a
+launch. `--send-test you@example.com` puts a real message through the configured
+transport, because a mail seam that has never delivered anything is not configured,
+it is merely set.
+
+```
+Verso preflight · NODE_ENV=production
+
+  ✗ mail            reset links go to the server log; a user who forgets their
+                    password is locked out until an operator reads it
+  ✗ backups         no offsite copy. The sightings and the on-view record cannot
+                    be rebuilt from anything
+  ...
+  4 blocking issues. Not ready for strangers.
+```
+
 | Variable | Purpose |
 |---|---|
 | `VERSO_DB_PATH` | SQLite file (default `data/verso.db`) |
@@ -265,6 +285,36 @@ NODE_ENV=production npm run build && npm start
 | `VERSO_MAIL` | `log` (default), `webhook`, or `none` |
 | `VERSO_MAIL_WEBHOOK` | POST target for outbound mail — Postmark, Resend, an SMTP bridge |
 | `VERSO_RECOGNITION` | `gallery-prior` (default), `http`, `none` |
+| `VERSO_ERROR_REPORTING` | `log` (default) or `webhook` |
+| `VERSO_ERROR_WEBHOOK` | POST target for server errors — Slack, Sentry relay, your own ingest |
+| `VERSO_BACKUP_DIR` | Where snapshots are written (default `data/backups`) |
+| `VERSO_BACKUP_HOOK` | Command run with the backup directory — the offsite copy |
+
+### Backups
+
+The catalogue rebuilds from The Met in fifteen seconds. The sightings, and the
+on-view record derived from them, rebuild from nothing.
+
+```bash
+npm run backup          # VACUUM INTO snapshot + photos + checksummed manifest
+npm run backup:verify   # re-checksum the newest one
+npm run backup:drill    # restore it somewhere harmless and check the row counts
+```
+
+`VACUUM INTO` rather than copying the file: under WAL a `cp` of `verso.db` can
+catch a torn state with committed transactions still in the `-wal`. Snapshots
+carry row counts and a SHA-256, and `restore` refuses a snapshot whose checksum
+does not match rather than overwriting a working database with a broken one.
+
+Hourly, with the offsite copy that makes it a backup rather than a second copy on
+the same failing disk:
+
+```
+0 * * * * cd /srv/verso && VERSO_BACKUP_HOOK=/srv/verso/offsite.sh node scripts/backup.mjs
+```
+
+**Run `npm run backup:drill` on a schedule too.** A backup nobody has restored is
+a rumour.
 
 `/api/health` returns 200 with the catalogue size, or 503 when the database is
 unreachable — point the load balancer at that rather than at `/`.

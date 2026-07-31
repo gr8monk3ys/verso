@@ -57,7 +57,14 @@ export async function sendMail(mail) {
     if (transport === "none") return true;
     if (transport === "webhook") {
       const endpoint = process.env.VERSO_MAIL_WEBHOOK;
-      if (!endpoint) return logTransport(mail);
+      if (!endpoint) {
+        // Falling back silently means an operator who *thinks* mail is configured
+        // finds out at the moment a locked-out user needs a reset link.
+        console.error(
+          "[mail] VERSO_MAIL=webhook but VERSO_MAIL_WEBHOOK is unset — logging instead",
+        );
+        return logTransport(mail);
+      }
       return await webhookTransport(mail, endpoint);
     }
     return logTransport(mail);

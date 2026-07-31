@@ -15,6 +15,11 @@ data/cache/
 data/media/
 public/uploads/
 
+# Backups are copies of the two things above. Committing them would put the whole
+# user database in the repository.
+data/backups/
+.drill/
+
 .env
 .env.local
 .DS_Store

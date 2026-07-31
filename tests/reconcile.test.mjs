@@ -4,8 +4,10 @@ import { reconcileWorks } from "../scripts/ingest/reconcile.mjs";
 import { fixtureProvider } from "../scripts/ingest/wikidata.mjs";
 import {
   acceptCandidate,
+  duplicateQidGroups,
   flagDuplicateQids,
   rejectCandidate,
+  resolveQidConflict,
 } from "../src/lib/domain/reconciliation.mjs";
 import { addWork, testDb } from "./helpers.mjs";
 
@@ -211,4 +213,55 @@ test("flagging duplicates is idempotent and quiet when there are none", () => {
   const only = addWork(db, "solo");
   db.prepare("UPDATE works SET wikidata_qid = 'Q1' WHERE id = ?").run(only);
   assert.deepEqual(flagDuplicateQids(db), { flagged: 0, qids: [] });
+});
+
+test("a contested Q-number is presented with the evidence that settles it", () => {
+  const db = testDb();
+  const bernard = addWork(db, "samuel-bernard", { title: "Samuel Bernard", accession: "66.210a-c" });
+  const fulton = addWork(db, "robert-fulton", { title: "Robert Fulton", accession: "1989.329" });
+  const set = db.prepare("UPDATE works SET wikidata_qid = 'Q55622989' WHERE id = ?");
+  set.run(bernard);
+  set.run(fulton);
+
+  const groups = duplicateQidGroups(db);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].qid, "Q55622989");
+  // The accession numbers are the whole point: the Q-number's own inventory
+  // statement names one of them, which is how a reviewer decides.
+  assert.deepEqual(
+    groups[0].works.map((w) => w.accession).sort(),
+    ["1989.329", "66.210a-c"],
+  );
+});
+
+test("awarding a contested Q-number detaches the other claimant without deleting it", () => {
+  const db = testDb();
+  const bernard = addWork(db, "samuel-bernard", { title: "Samuel Bernard", accession: "66.210a-c" });
+  const fulton = addWork(db, "robert-fulton", { title: "Robert Fulton", accession: "1989.329" });
+  for (const id of [bernard, fulton]) {
+    db.prepare("UPDATE works SET wikidata_qid = 'Q55622989', catalogue_status = 'conflicted' WHERE id = ?").run(id);
+    db.prepare("INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', 'Q55622989')").run(id);
+  }
+
+  // Wikidata says the inventory number is 66.210a-c, so Bernard keeps it.
+  const result = resolveQidConflict(db, bernard);
+  assert.equal(result.qid, "Q55622989");
+  assert.deepEqual(result.detached, [fulton]);
+
+  const row = (id) => db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(id);
+  assert.equal(row(bernard).wikidata_qid, "Q55622989");
+  assert.equal(row(bernard).catalogue_status, "matched");
+  // The loser goes back to the pool rather than being guessed at or dropped.
+  assert.equal(row(fulton).wikidata_qid, null);
+  assert.equal(row(fulton).catalogue_status, "unreconciled");
+
+  // The stale identifier row must go too, or an accession lookup finds it again.
+  const identifiers = db
+    .prepare("SELECT COUNT(*) AS n FROM work_identifiers WHERE work_id = ? AND scheme = 'wikidata'")
+    .get(fulton).n;
+  assert.equal(identifiers, 0);
+
+  // The work itself survives — it is a real object with a real accession number.
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM works").get().n, 2);
+  assert.equal(duplicateQidGroups(db).length, 0, "and the conflict is gone");
 });

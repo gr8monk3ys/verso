@@ -1,6 +1,11 @@
-import { all, get } from "@/lib/db";
-import { acceptCandidateAction, rejectCandidateAction } from "@/app/internal/reconciliation/actions";
+import { all, db, get } from "@/lib/db";
+import {
+  acceptCandidateAction,
+  rejectCandidateAction,
+  resolveQidConflictAction,
+} from "@/app/internal/reconciliation/actions";
 import { requireStaff } from "@/lib/auth/staff";
+import { duplicateQidGroups } from "@/lib/domain/reconciliation.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +55,19 @@ export default async function ReconciliationPage() {
       ORDER BY c.score DESC LIMIT 50`,
   );
 
+  // Contested Q-numbers are not candidate rows — nothing proposed them, the source
+  // shipped them — so they need their own read rather than appearing in the queue.
+  const conflicts = duplicateQidGroups(db()) as {
+    qid: string;
+    works: {
+      id: number;
+      slug: string;
+      title: string;
+      artist_display: string;
+      accession: string | null;
+    }[];
+  }[];
+
   const total = counts.matched + counts.unreconciled + counts.reviewed + counts.conflicted;
 
   return (
@@ -81,6 +99,54 @@ export default async function ReconciliationPage() {
           ? `${(((counts.matched + counts.reviewed) / total) * 100).toFixed(1)}% of the catalogue carries an identifier.`
           : "Empty catalogue."}
       </p>
+
+      {conflicts.length > 0 && (
+        <section className="mt-8">
+          <h2 className="label-caps mb-2">One Q-number, two works</h2>
+          <p className="mb-3 max-w-prose text-sm text-[var(--color-muted)]">
+            A Q-number identifies one physical object, so these cannot both be right.
+            They arrived this way from the source rather than from a bad match, which
+            is why the scoring thresholds never saw them. Open the Wikidata item and
+            compare its inventory number against the accession numbers below — that
+            settles it. The works that lose the identifier keep everything else and
+            go back to the unreconciled pool.
+          </p>
+          <ul className="divide-y divide-[var(--color-line)] border-y rule">
+            {conflicts.map((group) => (
+              <li key={group.qid} className="py-3">
+                <p className="text-xs text-[var(--color-muted)]">
+                  contested{" "}
+                  <a
+                    href={`https://www.wikidata.org/wiki/${group.qid}`}
+                    className="underline"
+                    rel="noreferrer noopener"
+                  >
+                    {group.qid}
+                  </a>{" "}
+                  · claimed by {group.works.length} works
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {group.works.map((work) => (
+                    <li key={work.id} className="flex flex-wrap items-baseline gap-x-2">
+                      <a href={`/work/${work.slug}`} className="display">
+                        {work.title}
+                      </a>
+                      <span className="text-sm text-[var(--color-muted)]">
+                        {work.artist_display || "unattributed"} ·{" "}
+                        accession <code>{work.accession ?? "none"}</code>
+                      </span>
+                      <form action={resolveQidConflictAction} className="ml-auto">
+                        <input type="hidden" name="work_id" value={work.id} />
+                        <button className="btn px-3 py-1 text-sm">This one keeps it</button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <h2 className="label-caps mt-8 mb-2">Waiting for a person</h2>
       {queue.length === 0 ? (
