@@ -55,11 +55,6 @@ and a share-sheet target so "share this photo to Verso" works from the camera
 roll — which is the single most natural entry point the product has and
 currently cannot accept.
 
-### Content-Security-Policy
-The App Router injects inline bootstrap scripts, so a real CSP needs
-per-request nonces threaded through middleware. A CSP with `unsafe-inline`
-would be decoration. Every other security header is set.
-
 ### Email delivery is configured but unproven for *your* vendor
 The transport seam and the preflight check exist: `npm run preflight` refuses a
 production boot with `VERSO_MAIL=log`, and `--send-test` puts a real message
@@ -79,9 +74,20 @@ query layer is small and has no ORM to unpick, but the rate limiter, the media
 directory and the session store all assume one node and would move with it.
 
 ### Abuse and safety, past the basics
-Report, block and a staff queue exist. A real launch also wants rate limits on
-writes, spam heuristics on new accounts, an appeals path, and someone whose job
-this is.
+Report, block, a staff moderation queue and per-user write limits on comments,
+follows, likes and lists all exist. What a real launch still wants is spam
+heuristics on new accounts, an appeals path, and someone whose job this is.
+
+The write limits are also in-process, like the auth limiter — they hold for one
+node and move to shared storage with the Postgres work below.
+
+### Style-src still allows inline
+`script-src` carries a per-request nonce with `strict-dynamic`, which is the half
+that matters. `style-src` keeps `'unsafe-inline'` because the rating bars, the
+Year in Art charts and the star widths are React `style={{…}}` props, and CSP has
+no nonce mechanism for a style attribute. Removing it means moving ~27 computed
+styles to CSS custom properties set on a nonced `<style>` element — worth doing,
+not urgent, since inline style cannot execute.
 
 ---
 

@@ -87,6 +87,8 @@ than assuming it — see [Metrics](#metrics).
 - Wikidata reconciliation with a human review queue
 - Crowdsourced "on view" inference — sightings become display evidence
 - Live metric gates, and a catalogue guardrail measured against real ground truth
+- CSP with per-request nonces, hourly backups with a rehearsed restore, and a
+  preflight check that refuses to call an unready deployment ready
 - Institutional analytics under a k-anonymity floor
 
 ---

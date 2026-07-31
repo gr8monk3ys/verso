@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# VERSO_BACKUP_HOOK — copy a finished backup somewhere the server cannot reach.
+#
+#   cp ops/offsite.sh.example ops/offsite.sh
+#   chmod +x ops/offsite.sh
+#   # then edit DEST below and set VERSO_BACKUP_HOOK=/srv/verso/ops/offsite.sh
+#
+# Invoked with exactly one argument: the directory of the backup just taken,
+# e.g. /srv/verso/data/backups/2026-07-30T054508Z
+#
+# It is exec'd, not shelled, so this must be a real executable file — you cannot
+# set VERSO_BACKUP_HOOK to a shell one-liner.
+#
+# Exit non-zero to fail the backup. scripts/backup.mjs propagates that, so cron
+# mails you rather than logging quietly into a file nobody reads. A backup that
+# never left the machine is a second copy on the disk that is going to fail.
+
+set -eu
+
+BACKUP_DIR="$1"
+STAMP="$(basename "$BACKUP_DIR")"
+
+# ---------------------------------------------------------------------------
+# Pick one and delete the rest.
+# ---------------------------------------------------------------------------
+
+# S3 (or any S3-compatible: Backblaze B2, Cloudflare R2, MinIO)
+#   Give the IAM user PutObject only — not DeleteObject. A server that can delete
+#   its own backups is one compromise away from having none, and ransomware
+#   deletes backups first. Set a lifecycle rule for expiry instead.
+DEST="s3://CHANGE-ME-verso-backups"
+exec aws s3 sync --only-show-errors "$BACKUP_DIR" "$DEST/$STAMP"
+
+# rclone — same idea, ~70 providers
+# DEST="remote:verso-backups"
+# exec rclone copy --quiet "$BACKUP_DIR" "$DEST/$STAMP"
+
+# restic — deduplicating and encrypted at rest, which matters here because the
+# snapshot contains every user's private notes and photographs.
+# export RESTIC_REPOSITORY="s3:s3.amazonaws.com/CHANGE-ME-verso-restic"
+# export RESTIC_PASSWORD_FILE="/etc/verso/restic.pass"
+# exec restic backup --tag verso "$BACKUP_DIR"
+
+# Another machine over ssh — the cheapest thing that is genuinely offsite.
+# exec rsync -a --quiet "$BACKUP_DIR/" "backup@elsewhere:/srv/verso-backups/$STAMP/"

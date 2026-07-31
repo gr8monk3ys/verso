@@ -15,7 +15,13 @@ export default function ForgotPage() {
       <AccountForm action={requestResetAction} submitLabel="Send the link">
         <label className="block">
           <span className="label-caps">Handle or email</span>
-          <input name="identifier" className="field mt-1" autoCapitalize="none" required />
+          <input
+            name="identifier"
+            autoComplete="username"
+            className="field mt-1"
+            autoCapitalize="none"
+            required
+          />
         </label>
       </AccountForm>
 

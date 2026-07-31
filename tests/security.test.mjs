@@ -180,3 +180,36 @@ test("a replayed client_uuid of your own still carries a late rating", () => {
   assert.equal(second.rating, 4, "and the late rating lands");
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n, 1);
 });
+
+// -------------------------------------------------------- write-path limits ---
+
+test("social writes are capped per user, and one spammer cannot silence another", () => {
+  // Auth was limited from the start; comments and follows were not, which left
+  // spam with nothing in the way but a report queue nobody is staffing yet.
+  resetRateLimits();
+  const limit = { max: 30, windowMs: 60 * 60 * 1000 };
+  for (let i = 0; i < 30; i++) {
+    assert.ok(checkRateLimit("comment:1", limit).ok, `comment ${i + 1} should pass`);
+  }
+  assert.equal(checkRateLimit("comment:1", limit).ok, false, "the 31st is refused");
+
+  // Keyed per user, so exhausting one account does not block anyone else.
+  assert.ok(checkRateLimit("comment:2", limit).ok);
+});
+
+test("the sighting write path is deliberately not rate limited", () => {
+  // A visit is fifteen works and a retrospective import is hundreds in a sitting.
+  // Throttling the core loop to stop spam would break the one behaviour the
+  // product exists to encourage — and a flood of sightings harms nobody else's
+  // feed the way a flood of comments does.
+  const actions = readFileSync(path.join("src", "app", "actions.ts"), "utf8");
+  const logAction = actions.slice(
+    actions.indexOf("export async function logSightingAction"),
+    actions.indexOf("export async function updateSightingAction"),
+  );
+  assert.ok(logAction.length > 0, "found the action");
+  assert.ok(
+    !logAction.includes("checkRateLimit"),
+    "logging a sighting must stay unthrottled; see WRITE_LIMITS for why",
+  );
+});

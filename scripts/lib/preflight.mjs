@@ -152,11 +152,17 @@ export function checkAll(env, fsProbe, state = {}) {
   );
 
   // ----------------------------------------------------------------- csp ---
+  // Checked by looking for the middleware that mints the nonce rather than
+  // asserted, so deleting it shows up here instead of silently dropping the
+  // policy on every response.
+  const hasMiddleware = fsProbe.exists("src/middleware.ts");
   add(
     "content-security-policy",
-    "warn",
-    "not set — needs per-request nonces through middleware (documented in ROADMAP.md)",
-    "accepted gap, or implement nonces",
+    hasMiddleware ? "pass" : "fail",
+    hasMiddleware
+      ? "per-request nonce, script-src 'strict-dynamic'"
+      : "src/middleware.ts is missing, so no CSP is being sent",
+    "restore src/middleware.ts",
   );
 
   return checks;

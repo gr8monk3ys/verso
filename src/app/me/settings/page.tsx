@@ -68,12 +68,19 @@ export default async function SettingsPage() {
         <AccountForm action={changePasswordAction} submitLabel="Change password">
           <label className="block">
             <span className="label-caps">Current password</span>
-            <input name="current_password" type="password" className="field mt-1" required />
+            <input
+              name="current_password"
+              type="password"
+              autoComplete="current-password"
+              className="field mt-1"
+              required
+            />
           </label>
           <label className="block">
             <span className="label-caps">New password</span>
             <input
               name="new_password"
+              autoComplete="new-password"
               type="password"
               className="field mt-1"
               minLength={8}
@@ -135,7 +142,13 @@ export default async function SettingsPage() {
             </label>
             <label className="block">
               <span className="label-caps">Password</span>
-              <input name="password" type="password" className="field mt-1" required />
+              <input
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                className="field mt-1"
+                required
+              />
             </label>
           </AccountForm>
         </div>

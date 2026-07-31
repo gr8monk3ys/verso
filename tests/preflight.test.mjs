@@ -28,8 +28,15 @@ const statusOf = (checks, name) => checks.find((c) => c.name === name)?.status;
 test("a fully configured production environment has no blockers", () => {
   const checks = checkAll(configured(), ALL_GOOD, READY_STATE);
   assert.equal(summarise(checks).fail, 0);
-  // CSP remains a deliberate, documented warning rather than a pass.
-  assert.equal(statusOf(checks, "content-security-policy"), "warn");
+  assert.equal(statusOf(checks, "content-security-policy"), "pass");
+});
+
+test("a missing middleware means no CSP is being sent, and that blocks", () => {
+  // The policy carries a per-request nonce, so it lives in middleware rather than
+  // next.config. Deleting that file silently drops the header from every response,
+  // which is precisely the kind of regression a checklist should catch.
+  const checks = checkAll(configured(), { exists: (p) => p !== "src/middleware.ts", writable: () => true }, READY_STATE);
+  assert.equal(statusOf(checks, "content-security-policy"), "fail");
 });
 
 test("the log mail transport is fine locally and a blocker in production", () => {

@@ -157,20 +157,53 @@ export async function deleteSightingAction(formData: FormData) {
 
 // ----------------------------------------------------------------- social --
 
+/**
+ * Write-path limits.
+ *
+ * Auth was rate limited from the start; the social write paths were not, which
+ * left comment and follow spam with nothing in the way but a report queue nobody
+ * is staffing yet. The numbers are set well above real use and only bite scripts:
+ * 30 comments an hour is far more than anybody writes about paintings, and 120
+ * follows an hour is more than a person can meaningfully choose.
+ *
+ * Deliberately *not* applied to logging a sighting. A visit is fifteen works and
+ * a retrospective import is hundreds in a sitting — throttling the core loop to
+ * stop spam would break the one behaviour the product exists to encourage, and a
+ * flood of sightings harms nobody else's feed the way a flood of comments does.
+ */
+const WRITE_LIMITS = {
+  comment: { max: 30, windowMs: 60 * 60 * 1000 },
+  follow: { max: 120, windowMs: 60 * 60 * 1000 },
+  like: { max: 300, windowMs: 60 * 60 * 1000 },
+  list: { max: 30, windowMs: 60 * 60 * 1000 },
+};
+
 export async function toggleLikeAction(formData: FormData) {
   const user = await actor();
+  if (!checkRateLimit(`like:${user.id}`, WRITE_LIMITS.like).ok) {
+    revalidatePath(String(formData.get("next") ?? "/"));
+    return;
+  }
   toggleLike(user.id, Number(formData.get("sighting_id")));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
+
 export async function addCommentAction(formData: FormData) {
   const user = await actor();
+  if (!checkRateLimit(`comment:${user.id}`, WRITE_LIMITS.comment).ok) {
+    redirect(String(formData.get("next") ?? "/"));
+  }
   addComment(user.id, Number(formData.get("sighting_id")), String(formData.get("body") ?? ""));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
 export async function toggleFollowAction(formData: FormData) {
   const user = await actor();
+  if (!checkRateLimit(`follow:${user.id}`, WRITE_LIMITS.follow).ok) {
+    revalidatePath(String(formData.get("next") ?? "/"));
+    return;
+  }
   const targetId = Number(formData.get("user_id"));
   if (isFollowing(user.id, targetId)) unfollow(user.id, targetId);
   else follow(user.id, targetId);
@@ -195,6 +228,7 @@ export async function createListAction(formData: FormData) {
   const user = await actor();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
+  if (!checkRateLimit(`list:${user.id}`, WRITE_LIMITS.list).ok) return;
   const list = createList({
     userId: user.id,
     title,

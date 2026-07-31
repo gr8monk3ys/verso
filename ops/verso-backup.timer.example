@@ -1,0 +1,14 @@
+# Hourly, with a jitter so a fleet of these does not all hit object storage on
+# the same second, and Persistent so a machine that was off catches up on boot
+# rather than silently skipping the window.
+
+[Unit]
+Description=Run the Verso backup hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
