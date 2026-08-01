@@ -54,9 +54,26 @@ export function pluralize(count: number, singular: string, plural?: string): str
   return `${count} ${count === 1 ? singular : (plural ?? `${singular}s`)}`;
 }
 
-/** Artist names arrive as "Vincent van Gogh" or "van Gogh, Vincent". */
+/**
+ * Artist names arrive as "Vincent van Gogh", "van Gogh, Vincent", or — for
+ * anything cast, printed or struck — several makers joined by a pipe:
+ * "Edgar Degas|A.-A. Hébrard et Cie".
+ *
+ * The pipe is a field separator in the Met's CSV and was rendering straight into
+ * the page. Credits are joined with a comma instead, which is how a wall label
+ * reads. Sixteen screens call this, so fixing it here fixes all of them.
+ */
 export function displayArtist(artist: string | null | undefined): string {
   if (!artist) return "Unattributed";
-  const parts = artist.split(",").map((part) => part.trim());
-  return parts.length === 2 && parts[1] ? `${parts[1]} ${parts[0]}` : artist;
+  const makers = artist
+    .split("|")
+    .map((maker) => maker.trim())
+    .filter(Boolean)
+    .map((maker) => {
+      // "van Gogh, Vincent" → "Vincent van Gogh", but only for a plain inversion;
+      // a name with two commas is a title or an attribution note, left alone.
+      const parts = maker.split(",").map((part) => part.trim());
+      return parts.length === 2 && parts[1] ? `${parts[1]} ${parts[0]}` : maker;
+    });
+  return makers.length ? makers.join(", ") : "Unattributed";
 }

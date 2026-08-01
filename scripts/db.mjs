@@ -17,6 +17,7 @@ import { openDb, transact, DB_PATH } from "./lib/db.mjs";
 import { slugify } from "../src/lib/text.mjs";
 import { seedDemo } from "./lib/demo.mjs";
 import { flagDuplicateQids } from "../src/lib/domain/reconciliation.mjs";
+import { buildArtists } from "../src/lib/domain/artist-store.mjs";
 
 const SEED_DIR = path.join("data", "seed");
 const VENUES = path.join(SEED_DIR, "venues.json");
@@ -203,6 +204,15 @@ async function main() {
     // The museum's own Wikidata links are an assertion, not a proof. Where one
     // Q-number arrives on two objects, both rows go to the human queue rather
     // than one of them silently winning.
+    // Artists are derived from works, so they are rebuilt whenever the catalogue
+    // is. An artist is a person; artist_display is a string that sometimes names
+    // two of them.
+    const artists = buildArtists(db);
+    console.log(
+      `artists ${artists.artists} across ${artists.works} works ` +
+        `(${artists.joined} joined by name, ${artists.refused.length} contested names refused)`,
+    );
+
     const duplicates = flagDuplicateQids(db);
     if (duplicates.flagged) {
       console.log(

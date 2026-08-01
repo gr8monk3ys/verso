@@ -2,6 +2,7 @@ import Link from "next/link";
 import { all } from "@/lib/db";
 import { searchWorks, type WorkCard } from "@/lib/domain/works";
 import { activeVenues } from "@/lib/domain/venues";
+import { searchArtists } from "@/lib/domain/artists";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
 import { displayArtist, pluralize } from "@/lib/format";
@@ -20,6 +21,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
   const venues = activeVenues();
   const venue = venues.find((item) => item.slug === venueSlug);
 
+  const artists = query.trim().length >= 2 ? searchArtists(query) : [];
   const results: WorkCard[] = tag
     ? all<WorkCard>(
         `SELECT w.*, v.name AS venue_name, v.slug AS venue_slug, d.location_label,
@@ -75,6 +77,29 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
         <p className="mt-4 text-sm text-[var(--color-muted)]">
           Works tagged <span className="text-[var(--color-paper)]">{tag}</span>.
         </p>
+      )}
+
+      {/* Artists first when the query looks like a person: searching "degas"
+          should offer his 98 works as one destination, not ninety-eight rows. */}
+      {artists.length > 0 && (
+        <section className="mt-4">
+          <h2 className="label-caps mb-2">Artists</h2>
+          <ul className="divide-y divide-[var(--color-line)] border-y rule">
+            {artists.map((artist) => (
+              <li key={artist.id}>
+                <Link
+                  href={`/artist/${artist.slug}`}
+                  className="flex items-baseline justify-between py-2"
+                >
+                  <span className="display">{artist.display_name}</span>
+                  <span className="text-xs text-[var(--color-muted)]">
+                    {pluralize(artist.work_count, "work")}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <p className="mt-4 label-caps">

@@ -410,3 +410,33 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------------------
+-- Artists.
+--
+-- Derived, not ingested: rebuilt from works by artist-store.mjs, because
+-- artist_display is a string and an artist is a person. See
+-- domain/artist-identity.mjs for why those differ and what is refused.
+--
+-- The Q-number is unique where present — it is the identity the museum asserted.
+-- Rows without one are keyed on a normalised name and keep their own page.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS artists (
+  id           INTEGER PRIMARY KEY,
+  slug         TEXT NOT NULL UNIQUE,
+  qid          TEXT UNIQUE,
+  display_name TEXT NOT NULL,
+  sort_name    TEXT NOT NULL DEFAULT '',
+  ulan         TEXT,
+  -- Denormalised so the browse and search paths do not count on every render.
+  work_count   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_artists_work_count ON artists(work_count DESC);
+CREATE INDEX IF NOT EXISTS idx_artists_sort ON artists(sort_name);
+
+CREATE TABLE IF NOT EXISTS work_artists (
+  work_id   INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
+  PRIMARY KEY (work_id, artist_id)
+);
+CREATE INDEX IF NOT EXISTS idx_work_artists_artist ON work_artists(artist_id);

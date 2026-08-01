@@ -14,6 +14,7 @@ import {
   workBySlug,
 } from "@/lib/domain/works";
 import { activeVenues } from "@/lib/domain/venues";
+import { artistsForWork } from "@/lib/domain/artists";
 import { isWatched, listsForUser } from "@/lib/domain/lists";
 import { commentsFor, likedByUser } from "@/lib/domain/social";
 import { Plate } from "@/components/Plate";
@@ -32,6 +33,7 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
 
   const user = await currentUser();
   const summary = ratingSummary(work.id);
+  const makers = artistsForWork(work.id);
   const display = whereIsIt(work.id);
   const reviews = popularReviews(work.id, 8);
   const recent = recentSightingsForWork(work.id, 8);
@@ -54,7 +56,18 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
         <div className="min-w-0">
           <h1 className="display text-2xl leading-tight md:text-3xl">{work.title}</h1>
           <p className="mt-1 text-[var(--color-muted)]">
-            {displayArtist(work.artist_display)}
+            {/* Linked where the maker resolved to an artist page; plain text for
+                the unattributed, which is 62% of what hangs at the Met. */}
+            {makers.length > 0
+              ? makers.map((maker, index) => (
+                  <span key={maker.id}>
+                    {index > 0 && ", "}
+                    <Link href={`/artist/${maker.slug}`} className="underline">
+                      {maker.display_name}
+                    </Link>
+                  </span>
+                ))
+              : displayArtist(work.artist_display)}
             {work.date_display ? ` · ${work.date_display}` : ""}
           </p>
           {work.medium && <p className="mt-1 text-sm text-[var(--color-muted)]">{work.medium}</p>}

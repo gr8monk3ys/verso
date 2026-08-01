@@ -72,6 +72,7 @@ than assuming it — see [Metrics](#metrics).
 **Social**
 - Follows and an activity feed that floats reviews above bare logs
 - Public work pages: aggregate rating, distribution, popular reviews
+- Artist pages: the whole oeuvre on view, how much of it you've seen, reviews
 - Likes, comments, public lists, watchlist with an on-display alert
 - Exhibition pages with a sightings roll-up
 - Block and report, with a staff moderation queue
@@ -239,7 +240,7 @@ measurement rather than a claim.
 | | |
 |---|---|
 | `npm run dev` / `build` / `start` | the app |
-| `npm test` | 102 tests, no network, no fixtures on disk |
+| `npm test` | 116 tests, no network, no fixtures on disk |
 | `npm run check` | typecheck + tests + build |
 | `npm run verify` | `check` plus a seeded database and the metric gates |
 | `npm run db:reset` / `db:seed` / `db:demo` | database lifecycle |
