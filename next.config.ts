@@ -27,6 +27,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // node:sqlite is a Node builtin; keep it out of the bundler's hands.
   serverExternalPackages: ["node:sqlite"],
+  // Without this, Next infers the workspace root by walking up for lockfiles
+  // and can land on one in the home directory — which silently changes what
+  // file tracing includes in a production build.
+  outputFileTracingRoot: __dirname,
   poweredByHeader: false,
   experimental: {
     // Sightings can carry a user photo; keep the server action limit generous.
