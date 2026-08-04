@@ -13,6 +13,7 @@ capture, a social layer, and the metric gates that decide whether the whole idea
 is working.
 
 ```bash
+# Node 24+ — node:sqlite is stable there and `next start` needs no flags
 git clone https://github.com/gr8monk3ys/verso && cd verso
 npm install
 npm run db:reset && npm run db:seed && npm run db:demo
@@ -252,6 +253,10 @@ measurement rather than a claim.
 ---
 
 ## Deployment
+
+For a systemd host, `ops/verso.service.example` is the app unit and
+`ops/verso.env.example` enumerates every variable below in one copy-editable
+file. By hand:
 
 ```bash
 VERSO_DB_PATH=/var/lib/verso/verso.db \
