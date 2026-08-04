@@ -1,0 +1,16 @@
+# Rebuilt inside the image
+node_modules
+.next
+out
+*.tsbuildinfo
+
+# Live data never ships in an image; the committed seed under data/seed does.
+data/verso.db
+data/verso.db-*
+data/cache
+data/media
+
+.git
+.github
+Dockerfile
+docker-compose.yml
