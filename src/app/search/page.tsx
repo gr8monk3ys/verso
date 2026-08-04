@@ -5,7 +5,7 @@ import { activeVenues } from "@/lib/domain/venues";
 import { searchArtists } from "@/lib/domain/artists";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
-import { displayArtist, pluralize } from "@/lib/format";
+import { displayArtist, displayTitle, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -129,7 +129,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="display text-base leading-tight">{work.title}</p>
+                  <p className="display text-base leading-tight">{displayTitle(work.title)}</p>
                   <p className="truncate text-sm text-[var(--color-muted)]">
                     {displayArtist(work.artist_display)}
                     {work.date_display ? ` · ${work.date_display}` : ""}

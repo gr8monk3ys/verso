@@ -5,6 +5,7 @@ import { activeVenues } from "@/lib/domain/venues";
 import { searchWorks } from "@/lib/domain/works";
 import { Plate } from "@/components/Plate";
 import { logSightingAction } from "@/app/actions";
+import { displayTitle } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export default async function OnboardingPage() {
             <Link href={`/work/${work.slug}`}>
               <Plate title={work.title} artist={work.artist_display} imageUrl={work.image_url} />
             </Link>
-            <p className="mt-1 truncate text-xs">{work.title}</p>
+            <p className="mt-1 truncate text-xs">{displayTitle(work.title)}</p>
             <p className="truncate text-[11px] text-[var(--color-muted)]">
               {work.artist_display || "Unattributed"}
             </p>

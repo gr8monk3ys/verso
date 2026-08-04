@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/auth/session";
 import { userByHandle } from "@/lib/domain/social";
 import { listBySlug, listItems } from "@/lib/domain/lists";
 import { Plate } from "@/components/Plate";
-import { displayArtist, pluralize } from "@/lib/format";
+import { displayArtist, displayTitle, pluralize } from "@/lib/format";
 import { removeFromListAction, deleteListAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +56,7 @@ export default async function ListPage({
             </Link>
             <div className="min-w-0 flex-1">
               <Link href={`/work/${item.slug}`} className="block truncate">
-                {item.title}
+                {displayTitle(item.title)}
               </Link>
               <p className="truncate text-xs text-[var(--color-muted)]">
                 {displayArtist(item.artist_display)}

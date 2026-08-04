@@ -11,7 +11,7 @@ import {
 } from "@/lib/domain/artists";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
-import { pluralize } from "@/lib/format";
+import { displayTitle, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -162,7 +162,7 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
             <li key={work.id}>
               <Link href={`/work/${work.slug}`} className="block">
                 <Plate title={work.title} artist={work.artist_display} imageUrl={work.image_url} />
-                <p className="mt-1 line-clamp-2 text-sm leading-snug">{work.title}</p>
+                <p className="mt-1 line-clamp-2 text-sm leading-snug">{displayTitle(work.title)}</p>
               </Link>
               <p className="mt-0.5 text-xs text-[var(--color-muted)]">
                 {work.location_label ?? "not on view"}
@@ -195,7 +195,7 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
                     href={`/work/${review.work_slug}`}
                     className="text-sm text-[var(--color-muted)] underline"
                   >
-                    {review.work_title}
+                    {displayTitle(review.work_title)}
                   </Link>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed">{review.review}</p>

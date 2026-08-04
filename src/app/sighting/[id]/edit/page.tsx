@@ -5,7 +5,7 @@ import { sightingById } from "@/lib/domain/sightings";
 import { activeVenues } from "@/lib/domain/venues";
 import { photoUrl } from "@/lib/media";
 import { EditSightingForm } from "@/components/EditSightingForm";
-import { displayArtist } from "@/lib/format";
+import { displayArtist, displayTitle } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export default async function EditSightingPage({
       <p className="label-caps">
         <Link href={`/sighting/${sighting.id}`}>← Back</Link>
       </p>
-      <h1 className="display mt-1 text-2xl">{sighting.work_title}</h1>
+      <h1 className="display mt-1 text-2xl">{displayTitle(sighting.work_title)}</h1>
       <p className="text-sm text-[var(--color-muted)]">
         {displayArtist(sighting.work_artist)}
       </p>

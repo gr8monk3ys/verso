@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
 import { photoUrl } from "@/lib/media";
-import { displayArtist, formatRelative, formatSeenOn } from "@/lib/format";
+import { displayArtist, displayTitle, formatRelative, formatSeenOn } from "@/lib/format";
 import { addCommentAction, toggleLikeAction } from "@/app/actions";
 import { attachPhotoAction, removeSightingAction, reportAction } from "@/app/sighting/actions";
 
@@ -31,10 +31,10 @@ export async function generateMetadata({
   const sighting = sightingById(Number(id));
   if (!sighting) return { title: "Not found — Verso" };
 
-  const title = `${sighting.display_name} on ${sighting.work_title}`;
+  const title = `${sighting.display_name} on ${displayTitle(sighting.work_title)}`;
   const description = sighting.review
     ? sighting.review.slice(0, 180)
-    : `${sighting.work_title} by ${displayArtist(sighting.work_artist)}, seen ${formatSeenOn(
+    : `${displayTitle(sighting.work_title)} by ${displayArtist(sighting.work_artist)}, seen ${formatSeenOn(
         sighting.seen_on,
         sighting.date_precision,
       )}.`;
@@ -96,7 +96,7 @@ export default async function SightingPage({
         </Link>
         <div className="min-w-0">
           <Link href={`/work/${sighting.work_slug}`} className="display text-2xl leading-tight">
-            {sighting.work_title}
+            {displayTitle(sighting.work_title)}
           </Link>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
             {displayArtist(sighting.work_artist)}

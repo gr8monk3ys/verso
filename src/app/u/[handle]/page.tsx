@@ -5,12 +5,13 @@ import { userByHandle, followCounts, isFollowing } from "@/lib/domain/social";
 import { sightingsForUser, worksSeenByUser } from "@/lib/domain/sightings";
 import { profileStats } from "@/lib/domain/stats";
 import { listsForUser } from "@/lib/domain/lists";
+import { MAX_FAVOURITES, favouritesForUser } from "@/lib/domain/favourites";
 import { loggedYears } from "@/lib/domain/stats";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
 import { SightingItem } from "@/components/SightingItem";
-import { displayArtist, pluralize } from "@/lib/format";
-import { toggleFollowAction } from "@/app/actions";
+import { displayTitle, pluralize } from "@/lib/format";
+import { toggleFavouriteAction, toggleFollowAction } from "@/app/actions";
 import { blockUserAction } from "@/app/account/actions";
 import { reportAction } from "@/app/sighting/actions";
 import { isBlockedEitherWay, REPORT_REASONS } from "@/lib/domain/moderation.mjs";
@@ -49,6 +50,7 @@ export default async function ProfilePage({
   const years = loggedYears(profile.id);
   const path = `/u/${profile.handle}`;
   const blocked = viewer ? isBlockedEitherWay(db(), viewer.id, profile.id) : false;
+  const favourites = favouritesForUser(profile.id);
 
   return (
     <div className="pb-10">
@@ -103,6 +105,57 @@ export default async function ProfilePage({
         </nav>
       </header>
 
+      {(favourites.length > 0 || isSelf) && (
+        <section className="border-b rule py-6">
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="label-caps">Favourites</h2>
+            {isSelf && favourites.length < MAX_FAVOURITES && (
+              <span className="text-xs text-[var(--color-muted)]">
+                {favourites.length} of {MAX_FAVOURITES} — add from any work you&apos;ve logged
+              </span>
+            )}
+          </div>
+          {favourites.length === 0 ? (
+            <p className="text-sm text-[var(--color-muted)]">
+              Four works, chosen. It is the part of a profile people actually read.
+            </p>
+          ) : (
+            <ul className="grid grid-cols-4 gap-3">
+              {favourites.map((favourite) => (
+                <li key={favourite.work_id}>
+                  <Link href={`/work/${favourite.slug}`}>
+                    <Plate
+                      title={favourite.title}
+                      artist={favourite.artist_display}
+                      imageUrl={favourite.image_url}
+                    />
+                    <p className="mt-1 truncate text-xs">{displayTitle(favourite.title)}</p>
+                  </Link>
+                  {/* A div, not a p: the remove form lives in here, and a form
+                      inside a p is invalid nesting that fails hydration. */}
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--color-muted)]">
+                    <Stars value={favourite.rating} />
+                    {isSelf && (
+                      <form action={toggleFavouriteAction}>
+                        <input type="hidden" name="work_id" value={favourite.work_id} />
+                        <input type="hidden" name="next" value={path} />
+                        <input type="hidden" name="undo" value="1" />
+                        <button
+                          className="cursor-pointer underline"
+                          aria-label={`Remove ${displayTitle(favourite.title)} from favourites`}
+                        >
+                          remove
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       <section className="py-6">
         <div className="mb-2 flex items-baseline justify-between">
           <h2 className="label-caps">Seen</h2>
@@ -122,7 +175,7 @@ export default async function ProfilePage({
                     artist={work.artist_display}
                     imageUrl={work.image_url}
                   />
-                  <p className="mt-1 truncate text-xs">{work.title}</p>
+                  <p className="mt-1 truncate text-xs">{displayTitle(work.title)}</p>
                   <p className="flex items-center gap-1 truncate text-[11px] text-[var(--color-muted)]">
                     <Stars value={work.best_rating} />
                     {work.times_seen > 1 && <span>×{work.times_seen}</span>}
@@ -139,8 +192,10 @@ export default async function ProfilePage({
           <h2 className="label-caps mb-2">Most seen artists</h2>
           <ul className="space-y-1 text-sm">
             {stats.topArtists.map((artist) => (
-              <li key={artist.artist_display} className="flex justify-between gap-4">
-                <span className="truncate">{displayArtist(artist.artist_display)}</span>
+              <li key={artist.id} className="flex justify-between gap-4">
+                <Link href={`/artist/${artist.slug}`} className="truncate">
+                  {artist.display_name}
+                </Link>
                 <span className="shrink-0 text-[var(--color-muted)]">
                   {pluralize(artist.n, "sighting")}
                   {artist.avg_rating != null && ` · ${artist.avg_rating.toFixed(1)}`}

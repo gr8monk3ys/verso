@@ -10,7 +10,7 @@ import {
 import { get } from "@/lib/db";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
-import { displayArtist, pluralize } from "@/lib/format";
+import { displayArtist, displayTitle, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +88,7 @@ export default async function VenuePage({
                     artist={work.artist_display}
                     imageUrl={work.image_url}
                   />
-                  <p className="mt-1 truncate text-xs">{work.title}</p>
+                  <p className="mt-1 truncate text-xs">{displayTitle(work.title)}</p>
                   <p className="text-[11px] text-[var(--color-muted)]">
                     <Stars value={Math.round(work.avg_rating * 2)} /> {work.n}
                   </p>
@@ -131,7 +131,7 @@ export default async function VenuePage({
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate">{work.title}</p>
+                  <p className="truncate">{displayTitle(work.title)}</p>
                   <p className="truncate text-xs text-[var(--color-muted)]">
                     {displayArtist(work.artist_display)}
                     {work.date_display ? ` · ${work.date_display}` : ""}

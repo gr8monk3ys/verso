@@ -136,6 +136,82 @@ export function searchWorks(query: string, options: SearchOptions = {}): WorkCar
   );
 }
 
+export type PopularWork = WorkCard & {
+  /** Distinct people, not sightings — see below. */
+  logger_count: number;
+};
+
+/** Windows the popular chart is willing to fall back through, widest last. */
+const POPULAR_WINDOWS = [
+  { key: "week", days: 7, label: "this week" },
+  { key: "month", days: 30, label: "this month" },
+  { key: "all", days: null, label: "all time" },
+] as const;
+
+export type PopularWindow = (typeof POPULAR_WINDOWS)[number]["key"];
+
+/**
+ * What people are actually stopping in front of.
+ *
+ * Ranked by **distinct loggers**, not by sightings. One person logging the same
+ * bronze on six visits is a devoted regular, not a trend, and counting sightings
+ * would let a single enthusiast set the front page. Distinct users is the
+ * cheapest honest proxy for "many people independently found this worth
+ * recording".
+ *
+ * Private diaries are excluded, and so are sightings marked private. A chart is
+ * a publication; anything in it is being shown to strangers, and somebody who
+ * set their diary to private did not agree to that. `created_at` rather than
+ * `seen_on` is the clock, because the question is what is being logged now —
+ * somebody logging a 2019 visit from memory today is this week's activity.
+ */
+export function popularWorks(options: { days?: number | null; limit?: number } = {}) {
+  const { days = 7, limit = 12 } = options;
+  const window = days == null ? "" : `AND s.created_at >= datetime('now', ?)`;
+  const params: unknown[] = days == null ? [] : [`-${days} days`];
+
+  return all<PopularWork>(
+    `SELECT ${CARD_COLUMNS},
+            (SELECT COUNT(DISTINCT s.user_id) FROM sightings s JOIN users u ON u.id = s.user_id
+              WHERE s.work_id = w.id AND s.is_private = 0 AND u.is_private = 0 ${window})
+              AS logger_count
+     ${CARD_JOINS}
+      WHERE logger_count > 0
+      ORDER BY logger_count DESC, avg_rating DESC, w.id
+      LIMIT ?`,
+    ...params,
+    limit,
+  );
+}
+
+/**
+ * The chart, with the window it had to widen to in order to have one.
+ *
+ * A quiet week has nothing worth charting, and an empty front page is worse than
+ * an older one — but silently showing all-time under a heading that says "this
+ * week" is a lie the page would tell forever. So the window is returned
+ * alongside the rows and the heading is written from it.
+ *
+ * A window qualifies only if the chart *discriminates*: enough rows to fill the
+ * grid, and a leader that more than one person logged. Counting rows alone is
+ * not enough, and produced exactly the failure it was meant to prevent — a full
+ * screen of twenty-four works every one of which read "1 logger", ranked in the
+ * end by whoever happened to give a five. That is a list of recent activity
+ * wearing a chart's clothes.
+ */
+export function popularChart(limit = 12): {
+  window: PopularWindow;
+  label: string;
+  works: PopularWork[];
+} {
+  for (const { key, days, label } of POPULAR_WINDOWS) {
+    const works = popularWorks({ days, limit });
+    const ranks = works.length >= Math.min(limit, 6) && (works[0]?.logger_count ?? 0) >= 2;
+    if (ranks || days == null) return { window: key, label, works };
+  }
+  return { window: "all", label: "all time", works: [] };
+}
+
 export function countSearchWorks(query: string, options: SearchOptions = {}): number {
   const match = ftsQuery(query);
   const venueId = options.venueId ?? null;

@@ -286,6 +286,26 @@ CREATE TABLE IF NOT EXISTS watchlist (
   PRIMARY KEY (user_id, work_id)
 );
 
+-- The four works at the top of a profile. Letterboxd's most-copied element, and
+-- the reason a profile is worth linking to at all: four posters say more about a
+-- person than any number of stats.
+--
+-- Restricted to works the owner has logged, which is the one place Verso should
+-- differ. A favourite film is a film you have seen; a favourite work you have
+-- only seen in reproduction is an aspiration, and Verso already has a word for
+-- that — the watchlist. The constraint is enforced in favourites-store.mjs
+-- rather than here, because SQLite cannot express "a row exists in sightings"
+-- as a CHECK.
+CREATE TABLE IF NOT EXISTS favourites (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  work_id    INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  -- 1..4, kept contiguous so the grid never has a hole in it.
+  position   INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, work_id)
+);
+CREATE INDEX IF NOT EXISTS idx_favourites_user ON favourites(user_id, position);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id         INTEGER PRIMARY KEY,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

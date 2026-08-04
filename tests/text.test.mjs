@@ -82,24 +82,9 @@ test("slugs are stable and url-safe", () => {
   assert.equal(slugify("   "), "untitled");
 });
 
-// ----------------------------------------------------------- artist credits ---
-
-test("co-maker credits read as a wall label, not as a CSV field", async () => {
-  // The Met joins makers with a pipe for anything cast, printed or struck. It was
-  // rendering straight into sixteen screens as "Edgar Degas|A.-A. Hébrard et Cie".
-  const { displayArtist } = await import("../src/lib/format.ts");
-
-  assert.equal(
-    displayArtist("Edgar Degas|A.-A. Hébrard et Cie"),
-    "Edgar Degas, A.-A. Hébrard et Cie",
-  );
-  assert.equal(displayArtist("van Gogh, Vincent"), "Vincent van Gogh", "inversion still works");
-  assert.equal(
-    displayArtist("van Gogh, Vincent|Some Foundry"),
-    "Vincent van Gogh, Some Foundry",
-    "and it applies per maker",
-  );
-  assert.equal(displayArtist(""), "Unattributed");
-  assert.equal(displayArtist(null), "Unattributed");
-  assert.equal(displayArtist("|"), "Unattributed", "a stray separator is not a credit");
-});
+// Artist credits and titles moved to catalogue-fields.test.mjs when the rules
+// moved out of format.ts. The test that used to live here asserted that
+// "van Gogh, Vincent" was flipped to "Vincent van Gogh" — a name that does not
+// occur in the catalogue. Against the names that do occur, the rule turned
+// "Andrea Briosco, called Riccio" into "called Riccio Andrea Briosco". The test
+// passed because it was written from the same assumption as the code.

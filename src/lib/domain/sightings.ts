@@ -1,6 +1,7 @@
 import "server-only";
 import { all, db, get, run, transact } from "@/lib/db";
 import * as store from "@/lib/domain/sighting-store.mjs";
+import { pruneUnseenFavourites } from "@/lib/domain/favourites-store.mjs";
 import { deleteMedia } from "@/lib/media";
 
 export type SightingInput = {
@@ -141,6 +142,9 @@ export function deleteSighting(id: number, userId: number) {
   );
   if (!owned) return;
   run("DELETE FROM sightings WHERE id = ? AND user_id = ?", id, userId);
+  // A favourite you have no log of is exactly the state the "only what you have
+  // seen" rule exists to prevent, reached the long way round.
+  pruneUnseenFavourites(db(), userId);
   if (owned.photo_path) void deleteMedia(owned.photo_path);
 }
 

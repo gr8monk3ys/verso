@@ -1,5 +1,5 @@
 import { sightingById } from "@/lib/domain/sightings";
-import { displayArtist, formatSeenOn } from "@/lib/format";
+import { displayArtist, displayTitle, formatSeenOn } from "@/lib/format";
 import { OG_CONTENT_TYPE, OG_SIZE, ogCard } from "@/lib/og";
 
 export const size = OG_SIZE;
@@ -14,9 +14,9 @@ export default async function Image({ params }: { params: Promise<{ id: string }
   return ogCard({
     eyebrow: `@${sighting.handle} · ${formatSeenOn(sighting.seen_on, sighting.date_precision)}`,
     // The review is the thing worth sharing; the work is the subtitle.
-    title: sighting.review ? `“${sighting.review.slice(0, 150)}”` : sighting.work_title,
+    title: sighting.review ? `“${sighting.review.slice(0, 150)}”` : displayTitle(sighting.work_title),
     subtitle: sighting.review
-      ? `${sighting.work_title} — ${displayArtist(sighting.work_artist)}`
+      ? `${displayTitle(sighting.work_title)} — ${displayArtist(sighting.work_artist)}`
       : displayArtist(sighting.work_artist),
     rating: sighting.rating,
     footer: sighting.venue_name ?? undefined,

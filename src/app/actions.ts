@@ -22,6 +22,7 @@ import {
   unfollow,
 } from "@/lib/domain/social";
 import { addToList, createList, deleteList, removeFromList, toggleWatch } from "@/lib/domain/lists";
+import { addFavouriteWork, removeFavouriteWork } from "@/lib/domain/favourites";
 import { recordRecognition } from "@/lib/recognition";
 import { get } from "@/lib/db";
 import { checkRateLimit, clearRateLimit } from "@/lib/rate-limit.mjs";
@@ -214,6 +215,31 @@ export async function toggleWatchAction(formData: FormData) {
   const user = await actor();
   toggleWatch(user.id, Number(formData.get("work_id")));
   revalidatePath(String(formData.get("next") ?? "/"));
+}
+
+/**
+ * Add or remove one of the four works on a profile.
+ *
+ * Both refusals the store can return are already prevented by the page — the
+ * button only renders on a work you have logged, and it renders disabled once
+ * four slots are taken. They can still be reached by a form left open in another
+ * tab, so the reason is passed back in the query string rather than swallowed:
+ * a button that silently does nothing is the worst of the three outcomes.
+ */
+export async function toggleFavouriteAction(formData: FormData) {
+  const user = await actor();
+  const workId = Number(formData.get("work_id"));
+  const next = safeNext(formData.get("next")) ?? "/";
+
+  if (formData.get("undo")) {
+    removeFavouriteWork(user.id, workId);
+    revalidatePath(next);
+    return;
+  }
+
+  const result = addFavouriteWork(user.id, workId);
+  revalidatePath(next);
+  if (!result.ok) redirect(`${next}?favourite=${result.reason}`);
 }
 
 export async function markNotificationsReadAction() {

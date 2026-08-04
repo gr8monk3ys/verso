@@ -1,5 +1,5 @@
 import { ratingSummary, workBySlug } from "@/lib/domain/works";
-import { displayArtist } from "@/lib/format";
+import { displayArtist, displayTitle } from "@/lib/format";
 import { OG_CONTENT_TYPE, OG_SIZE, ogCard } from "@/lib/og";
 
 export const size = OG_SIZE;
@@ -14,7 +14,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const summary = ratingSummary(work.id);
   return ogCard({
     eyebrow: work.venue_name ?? "In the catalogue",
-    title: work.title,
+    title: displayTitle(work.title),
     subtitle: [displayArtist(work.artist_display), work.date_display]
       .filter(Boolean)
       .join(" · "),

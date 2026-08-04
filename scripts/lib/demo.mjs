@@ -219,7 +219,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
 
   const summary = {
     users: 0, sightings: 0, ratings: 0, reviews: 0, lists: 0,
-    follows: 0, likes: 0, comments: 0, watchlist: 0, exhibitions: 0,
+    follows: 0, likes: 0, comments: 0, watchlist: 0, favourites: 0, exhibitions: 0,
   };
 
   transact(db, () => {
@@ -553,6 +553,28 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
         insertWatch.run(userId, pick(random, watchPool).id, "");
         summary.watchlist++;
       }
+    }
+
+    // ------------------------------------------------------------ favourites --
+    // Chosen from what each persona rated highest, because that is how somebody
+    // actually picks a top four — and because the store refuses a work the user
+    // has no sighting for, so anything else would silently insert nothing.
+    const insertFavourite = db.prepare(
+      "INSERT OR IGNORE INTO favourites (user_id, work_id, position) VALUES (?,?,?)",
+    );
+    const bestRated = db.prepare(
+      `SELECT DISTINCT work_id FROM sightings
+        WHERE user_id = ? AND rating IS NOT NULL
+        ORDER BY rating DESC, work_id LIMIT 4`,
+    );
+    for (const userId of allUserIds) {
+      // Not everyone fills all four. A profile where every account has exactly
+      // four favourites looks seeded, because it is.
+      const slots = intBetween(random, [0, 4]);
+      bestRated.all(userId).slice(0, slots).forEach((row, index) => {
+        insertFavourite.run(userId, row.work_id, index + 1);
+        summary.favourites++;
+      });
     }
   });
 

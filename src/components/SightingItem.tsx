@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
-import { displayArtist, formatRelative, formatSeenOn } from "@/lib/format";
+import { displayArtist, displayTitle, formatRelative, formatSeenOn } from "@/lib/format";
 import type { SightingCard } from "@/lib/domain/sightings";
 import { toggleLikeAction } from "@/app/actions";
 
@@ -49,7 +49,7 @@ export function SightingItem({
                 href={`/work/${sighting.work_slug}`}
                 className="display text-lg leading-tight"
               >
-                {sighting.work_title}
+                {displayTitle(sighting.work_title)}
               </Link>
               <span className="text-sm text-[var(--color-muted)]">{sighting.work_date}</span>
             </div>

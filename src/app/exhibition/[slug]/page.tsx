@@ -11,7 +11,7 @@ import { likedByUser } from "@/lib/domain/social";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
 import { SightingItem } from "@/components/SightingItem";
-import { pluralize } from "@/lib/format";
+import { displayTitle, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +84,7 @@ export default async function ExhibitionPage({
                   artist={work.artist_display}
                   imageUrl={work.image_url}
                 />
-                <p className="mt-1 truncate text-xs">{work.title}</p>
+                <p className="mt-1 truncate text-xs">{displayTitle(work.title)}</p>
                 <p className="text-[11px] text-[var(--color-muted)]">
                   {work.avg_rating != null && <Stars value={Math.round(work.avg_rating * 2)} />}
                   {work.sighting_count > 0 && ` ${work.sighting_count}`}
