@@ -5,7 +5,7 @@
   "description": "A logging, rating and review platform for art",
   "license": "GPL-3.0-or-later",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "next dev",

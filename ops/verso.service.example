@@ -1,0 +1,37 @@
+# The application itself. The backup timer next to it is what makes running a
+# one-box SQLite app a responsible choice rather than a shortcut.
+#
+#   cp ops/verso.service.example /etc/systemd/system/verso.service
+#   cp ops/verso.env.example /etc/verso.env      # then fill it in
+#   systemctl daemon-reload
+#   systemctl enable --now verso
+#
+# WorkingDirectory is load-bearing: schema.sql is read relative to it at boot.
+# Run from anywhere else and the service exits with a message naming the paths
+# it tried — set VERSO_SCHEMA_PATH rather than guessing (src/lib/db/index.ts).
+
+[Unit]
+Description=Verso
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=verso
+WorkingDirectory=/srv/verso
+EnvironmentFile=/etc/verso.env
+Environment=NODE_ENV=production
+# `next start` — the same entry point as `npm start`, without npm in the way.
+# Node >= 24: node:sqlite is stable there, and `next start` passes no flags.
+ExecStart=/usr/bin/node node_modules/.bin/next start --port 3000
+Restart=on-failure
+RestartSec=3
+
+# One process, one box: the unit only needs to write the data directory.
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/verso /srv/verso/.next
+
+[Install]
+WantedBy=multi-user.target
