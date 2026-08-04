@@ -16,9 +16,13 @@ import path from "node:path";
 import { openDb, transact, DB_PATH } from "./lib/db.mjs";
 import { slugify } from "../src/lib/text.mjs";
 import { seedDemo } from "./lib/demo.mjs";
+import { flagDuplicateQids } from "../src/lib/domain/reconciliation.mjs";
+import { buildArtists } from "../src/lib/domain/artist-store.mjs";
+import { loadExhibitions } from "./ingest/exhibitions.mjs";
 
 const SEED_DIR = path.join("data", "seed");
 const VENUES = path.join(SEED_DIR, "venues.json");
+const EXHIBITIONS = path.join(SEED_DIR, "exhibitions.json");
 
 /** Every *-catalogue.ndjson.gz in data/seed, so a second source just drops in. */
 function catalogueFiles() {
@@ -199,8 +203,41 @@ async function main() {
       `venues ${venues} · works +${result.inserted} (skipped ${result.skipped}) · ` +
         `displays +${result.displays} · catalogue ${total}`,
     );
+    // The museum's own Wikidata links are an assertion, not a proof. Where one
+    // Q-number arrives on two objects, both rows go to the human queue rather
+    // than one of them silently winning.
+    // Artists are derived from works, so they are rebuilt whenever the catalogue
+    // is. An artist is a person; artist_display is a string that sometimes names
+    // two of them.
+    const artists = buildArtists(db);
+    console.log(
+      `artists ${artists.artists} across ${artists.works} works ` +
+        `(${artists.joined} joined by name, ${artists.refused.length} contested names refused)`,
+    );
+
+    const duplicates = flagDuplicateQids(db);
+    if (duplicates.flagged) {
+      console.log(
+        `conflicted ${duplicates.flagged} works across ${duplicates.qids.length} ` +
+          `duplicated Q-numbers (${duplicates.qids.join(", ")}) → /internal/reconciliation`,
+      );
+    }
+
+    // Real exhibitions, from the museum's public listing (see the loader for
+    // why this is a checked-in file rather than a scraper).
+    if (existsSync(EXHIBITIONS)) {
+      const shows = loadExhibitions(db, JSON.parse(readFileSync(EXHIBITIONS, "utf8")));
+      console.log(
+        `exhibitions +${shows.inserted} (updated ${shows.updated}` +
+          (shows.skipped.length ? `, skipped ${shows.skipped.length}` : "") +
+          `)`,
+      );
+    }
   } else if (command === "demo") {
     const summary = seedDemo(db);
+    // Mark the dataset as generated, so the metric gates can say so instead of
+    // reporting a PASS that reads like evidence about real users.
+    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('dataset', 'demo')").run();
     console.log(
       Object.entries(summary)
         .map(([key, value]) => `${key} ${value}`)

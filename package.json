@@ -5,7 +5,7 @@
   "description": "A logging, rating and review platform for art",
   "license": "GPL-3.0-or-later",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "next dev",
@@ -21,12 +21,20 @@
     "ingest:aic": "node --experimental-sqlite scripts/ingest/aic.mjs",
     "reconcile": "node --experimental-sqlite scripts/ingest/reconcile.mjs",
     "metrics": "node --experimental-sqlite scripts/metrics.mjs",
+    "preflight": "node --experimental-sqlite scripts/preflight.mjs",
+    "backup": "node --experimental-sqlite scripts/backup.mjs",
+    "backup:verify": "node --experimental-sqlite scripts/restore.mjs --latest --verify",
+    "backup:drill": "node --experimental-sqlite scripts/restore.mjs --latest --into .drill && rm -rf .drill",
+    "restore": "node --experimental-sqlite scripts/restore.mjs",
+    "eval:catalogue": "node --experimental-sqlite scripts/eval-reconciliation.mjs --arm accession --limit 120",
+    "eval:catalogue:replay": "node --experimental-sqlite scripts/eval-reconciliation.mjs --arm accession --limit 120 --replay data/eval/reconciliation.json",
+    "eval:catalogue:label": "node --experimental-sqlite scripts/eval-reconciliation.mjs --arm label --limit 40",
     "test": "node --test \"tests/*.test.mjs\"",
     "check": "npm run typecheck && npm test && npm run build",
     "verify": "npm run check && npm run db:reset && npm run db:seed && npm run db:demo && npm run metrics"
   },
   "dependencies": {
-    "next": "15.5.4",
+    "next": "^15.5.21",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "server-only": "^0.0.1",
@@ -39,5 +47,9 @@
     "@types/react-dom": "19.1.9",
     "tailwindcss": "4.1.13",
     "typescript": "5.9.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.18",
+    "sharp": "^0.35.0"
   }
 }

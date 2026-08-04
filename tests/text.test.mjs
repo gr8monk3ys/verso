@@ -81,3 +81,10 @@ test("slugs are stable and url-safe", () => {
   assert.equal(slugify("Café Terrace at Night"), "cafe-terrace-at-night");
   assert.equal(slugify("   "), "untitled");
 });
+
+// Artist credits and titles moved to catalogue-fields.test.mjs when the rules
+// moved out of format.ts. The test that used to live here asserted that
+// "van Gogh, Vincent" was flipped to "Vincent van Gogh" — a name that does not
+// occur in the catalogue. Against the names that do occur, the rule turned
+// "Andrea Briosco, called Riccio" into "called Riccio Andrea Briosco". The test
+// passed because it was written from the same assumption as the code.

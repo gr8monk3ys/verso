@@ -9,10 +9,10 @@ import {
 import { catalogueStats } from "@/lib/domain/stats";
 import { unratedCount } from "@/lib/domain/sightings";
 import { activeVenues, currentExhibitions } from "@/lib/domain/venues";
-import { searchWorks } from "@/lib/domain/works";
+import { popularChart } from "@/lib/domain/works";
 import { SightingItem } from "@/components/SightingItem";
 import { Plate } from "@/components/Plate";
-import { displayArtist, pluralize } from "@/lib/format";
+import { displayArtist, displayTitle, pluralize } from "@/lib/format";
 import { toggleFollowAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -67,9 +67,12 @@ export default async function HomePage({
             Follow a few people, or log something — a feed is downstream of a habit,
             not the other way round.
           </p>
-          <div className="mt-4 flex justify-center gap-3">
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
             <Link href="/capture" className="btn btn-primary">
               Log a work
+            </Link>
+            <Link href="/popular" className="btn">
+              See what&apos;s popular
             </Link>
             <Link href="/people" className="btn">
               Find people
@@ -128,7 +131,7 @@ async function Landing() {
   const stats = catalogueStats();
   const venues = activeVenues();
   const exhibitions = currentExhibitions(3);
-  const sample = searchWorks("", { limit: 6 });
+  const chart = popularChart(6);
 
   return (
     <div className="pb-8">
@@ -168,14 +171,22 @@ async function Landing() {
         ))}
       </section>
 
+      {/* A chart rather than a sample. What a stranger needs from a landing page
+          is evidence that somebody is using this, and six arbitrary works from
+          the catalogue prove only that the catalogue exists. */}
       <section className="py-8">
-        <h2 className="label-caps mb-3">In the catalogue</h2>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="label-caps">Popular {chart.label}</h2>
+          <Link href="/popular" className="text-xs text-[var(--color-muted)]">
+            the whole chart →
+          </Link>
+        </div>
         <ul className="grid grid-cols-3 gap-3 md:grid-cols-6">
-          {sample.map((work) => (
+          {chart.works.map((work) => (
             <li key={work.id}>
               <Link href={`/work/${work.slug}`}>
                 <Plate title={work.title} artist={work.artist_display} imageUrl={work.image_url} />
-                <p className="mt-1 truncate text-xs">{work.title}</p>
+                <p className="mt-1 truncate text-xs">{displayTitle(work.title)}</p>
                 <p className="truncate text-xs text-[var(--color-muted)]">
                   {displayArtist(work.artist_display)}
                 </p>
@@ -220,6 +231,11 @@ async function Landing() {
               <li className="text-[var(--color-muted)]">Nothing listed yet.</li>
             )}
           </ul>
+          <p className="mt-3 text-xs">
+            <Link href="/exhibitions" className="text-[var(--color-muted)] underline">
+              All exhibitions →
+            </Link>
+          </p>
         </div>
       </section>
     </div>

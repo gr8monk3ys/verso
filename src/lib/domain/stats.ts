@@ -50,11 +50,25 @@ export function profileStats(userId: number, viewerId: number | null) {
     userId,
   );
 
-  const topArtists = all<{ artist_display: string; n: number; avg_rating: number | null }>(
-    `SELECT w.artist_display, COUNT(*) AS n, AVG(s.rating) / 2.0 AS avg_rating
-       FROM sightings s JOIN works w ON w.id = s.work_id
-      WHERE s.user_id = ? AND w.artist_display <> '' ${privacy}
-      GROUP BY w.artist_display ORDER BY n DESC, w.artist_display LIMIT 8`,
+  // Grouped by resolved artist, not by the raw `artist_display` string. Keyed on
+  // the string, somebody who had seen four Degas bronzes and two pastels got
+  // three separate rows — "Edgar Degas", "Edgar Degas|A.-A. Hébrard et Cie" and
+  // "Edgar Degas|A. A. Hébrard" — none of which was their most-seen artist, and
+  // one of which named a foundry. The join also drops the unattributed, which is
+  // right: "Anonymous, 62% of the Met" is not somebody's favourite artist.
+  const topArtists = all<{
+    id: number;
+    slug: string;
+    display_name: string;
+    n: number;
+    avg_rating: number | null;
+  }>(
+    `SELECT a.id, a.slug, a.display_name, COUNT(*) AS n, AVG(s.rating) / 2.0 AS avg_rating
+       FROM sightings s
+       JOIN work_artists wa ON wa.work_id = s.work_id
+       JOIN artists a ON a.id = wa.artist_id
+      WHERE s.user_id = ? ${privacy}
+      GROUP BY a.id ORDER BY n DESC, a.sort_name LIMIT 8`,
     userId,
   );
 

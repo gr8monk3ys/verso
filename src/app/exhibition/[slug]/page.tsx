@@ -11,7 +11,7 @@ import { likedByUser } from "@/lib/domain/social";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
 import { SightingItem } from "@/components/SightingItem";
-import { pluralize } from "@/lib/format";
+import { displayTitle, formatSeenOn, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +32,17 @@ export default async function ExhibitionPage({
     ? likedByUser(user.id, sightings.map((sighting) => sighting.id))
     : new Set<number>();
 
-  const running =
-    exhibition.ends_on && exhibition.ends_on >= new Date().toISOString().slice(0, 10);
+  // Three states, not two: real listings include announced shows that have not
+  // opened, and the museum's "Ongoing" installations, which have no end date.
+  const today = new Date().toISOString().slice(0, 10);
+  const status =
+    exhibition.starts_on && exhibition.starts_on > today
+      ? `opens ${formatSeenOn(exhibition.starts_on)}`
+      : exhibition.ends_on == null
+        ? "ongoing"
+        : exhibition.ends_on >= today
+          ? `on now · until ${formatSeenOn(exhibition.ends_on)}`
+          : "closed";
 
   return (
     <div className="pb-10">
@@ -45,12 +54,20 @@ export default async function ExhibitionPage({
         {exhibition.subtitle && (
           <p className="text-[var(--color-muted)]">{exhibition.subtitle}</p>
         )}
-        <p className="mt-2 text-sm text-[var(--color-muted)]">
-          {exhibition.starts_on} – {exhibition.ends_on}
-          {running ? " · on now" : " · closed"}
-        </p>
+        <p className="mt-2 text-sm text-[var(--color-muted)]">{status}</p>
         {exhibition.description && (
           <p className="mt-3 max-w-prose text-sm">{exhibition.description}</p>
+        )}
+        {exhibition.url && (
+          <p className="mt-2 text-xs">
+            <a
+              href={exhibition.url}
+              rel="noreferrer noopener"
+              className="text-[var(--color-muted)] underline"
+            >
+              Exhibition page at {exhibition.venue_name} →
+            </a>
+          </p>
         )}
       </header>
 
@@ -75,6 +92,12 @@ export default async function ExhibitionPage({
 
       <section className="py-6">
         <h2 className="label-caps mb-2">In the show</h2>
+        {works.length === 0 && (
+          <p className="text-sm text-[var(--color-muted)]">
+            The museum doesn&apos;t publish an object list, so this builds itself:
+            log a work while you&apos;re at the show and it appears here.
+          </p>
+        )}
         <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
           {works.map((work) => (
             <li key={work.id}>
@@ -84,7 +107,7 @@ export default async function ExhibitionPage({
                   artist={work.artist_display}
                   imageUrl={work.image_url}
                 />
-                <p className="mt-1 truncate text-xs">{work.title}</p>
+                <p className="mt-1 truncate text-xs">{displayTitle(work.title)}</p>
                 <p className="text-[11px] text-[var(--color-muted)]">
                   {work.avg_rating != null && <Stars value={Math.round(work.avg_rating * 2)} />}
                   {work.sighting_count > 0 && ` ${work.sighting_count}`}

@@ -9,8 +9,21 @@ next-env.d.ts
 data/verso.db
 data/verso.db-*
 data/cache/
+
+# Uploaded photographs. VERSO_MEDIA_DIR defaults here, so without this a user's
+# camera roll ends up committed. public/uploads/ is the path nothing writes to.
+data/media/
 public/uploads/
+
+# Backups are copies of the two things above. Committing them would put the whole
+# user database in the repository.
+data/backups/
+.drill/
 
 .env
 .env.local
 .DS_Store
+
+# Playwright MCP writes page snapshots and console logs here during
+# browser verification. Working notes, not artefacts.
+.playwright-mcp/

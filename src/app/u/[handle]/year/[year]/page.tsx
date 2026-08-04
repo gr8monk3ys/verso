@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/auth/session";
 import { userByHandle } from "@/lib/domain/social";
 import { yearInArt } from "@/lib/domain/stats";
 import { Stars } from "@/components/Stars";
-import { displayArtist, formatSeenOn, pluralize } from "@/lib/format";
+import { displayArtist, displayTitle, formatSeenOn, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +97,7 @@ export default async function YearPage({
                   <li key={`${work.slug}-${work.seen_on}`} className="flex gap-3 py-2 text-sm">
                     <Stars value={work.rating} />
                     <Link href={`/work/${work.slug}`} className="min-w-0 flex-1 truncate">
-                      {work.title}{" "}
+                      {displayTitle(work.title)}{" "}
                       <span className="text-[var(--color-muted)]">
                         {displayArtist(work.artist_display)}
                       </span>

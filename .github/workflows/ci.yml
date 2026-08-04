@@ -1,27 +1,20 @@
 name: CI
 
 # ---------------------------------------------------------------------------
-# Manual trigger only, deliberately.
+# Re-enabled 2026-08-04. The runner/billing condition that killed runs on
+# PR #1 (created, failed ~3s later, zero steps executed) cleared with the
+# monthly Actions quota; a workflow_dispatch diagnostic ran green end to end.
+# If PRs ever show that instant-failure pattern again, it is the quota, not
+# the workflow — see the fleet notes in ~/code/CLAUDE.md.
 #
-# GitHub Actions cannot currently start a runner in this repository: two runs
-# on PR #1 were created and failed ~3 seconds later having executed no step at
-# all, which is a runner/billing condition rather than anything in the
-# workflow. Left on `pull_request`, that puts a permanent red X on every pull
-# request and teaches everyone to ignore the checks — worse than no CI.
-#
-# TO RE-ENABLE once Actions can run here: uncomment the `pull_request` and
-# `push` triggers below. Nothing else needs to change; the job itself has never
-# been the problem.
-#
-# Until then the same sequence runs locally as `npm run check` (typecheck,
-# tests, build) and `npm run verify` (the above plus a seeded database and the
-# §13 metric gates). `npm run verify` is what a release should be cut from.
+# `npm run verify` locally is the same sequence and remains what a release is
+# cut from; this exists so the merge gate has a check that runs on PRs.
 # ---------------------------------------------------------------------------
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [main]
-  # pull_request:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
   check:
@@ -31,8 +24,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # node:sqlite needs 22.5+; the app uses no native modules.
-          node-version: "22"
+          # Node 24: node:sqlite is stable and `next start` needs no flags —
+          # on 22 the scripts pass --experimental-sqlite but the server itself
+          # cannot, so 24 is the honest floor (package.json engines agrees).
+          node-version: "24"
           cache: npm
 
       - run: npm ci
@@ -45,11 +40,20 @@ jobs:
 
       # The §13 guardrail: catalogue match accuracy below 95% means stop
       # feature work. `npm run metrics` exits non-zero when it fails, which is
-      # the only reason it counts as a guardrail rather than a chart. The
-      # reconciled catalogue is committed, so this needs no network.
+      # the only reason it counts as a guardrail rather than a chart.
+      #
+      # It reads data/eval/reconciliation.json — the reconciler graded against the
+      # Q-numbers the Met publishes for each object. That artifact is committed, so
+      # this needs no network, and a missing artifact fails rather than passing
+      # quietly. Refresh it deliberately with `npm run eval:catalogue` (hits WDQS).
       - name: Metric gates
         run: |
           npm run db:reset
           npm run db:seed
           npm run db:demo
           npm run metrics
+
+      # Regrade the committed evaluation from its cached candidate responses, so a
+      # scorer or threshold change that moves the guardrail cannot land unnoticed.
+      - name: Catalogue accuracy (replay, no network)
+        run: npm run eval:catalogue:replay

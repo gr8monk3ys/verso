@@ -15,6 +15,9 @@ export default async function ListsPage({ params }: { params: Promise<{ handle: 
 
   const viewer = await currentUser();
   const isSelf = viewer?.id === profile.id;
+  // A list being marked public does not outrank its owner being private —
+  // account privacy is the outer gate, the same rule the sitemap states.
+  if (profile.is_private && !isSelf) notFound();
   const lists = listsForUser(profile.id, viewer?.id ?? null);
 
   return (

@@ -19,6 +19,9 @@ export type User = {
 };
 
 export function createSession(userId: number): string {
+  // The opportunistic moment pruneSessions was written for. Nothing else called
+  // it, so expired rows accumulated for the life of the database.
+  pruneSessions();
   const id = randomBytes(32).toString("hex");
   run(
     `INSERT INTO sessions (id, user_id, expires_at)
@@ -41,13 +44,21 @@ export async function setSessionCookie(sessionId: string) {
   });
 }
 
+/**
+ * Columns named rather than `u.*`: this object is handed to every page, so a
+ * future component that spreads it must not be able to serialise password_hash
+ * into an RSC payload. What isn't selected can't leak.
+ */
+const USER_COLUMNS =
+  "u.id, u.handle, u.display_name, u.email, u.bio, u.home_city, u.is_private, u.created_at";
+
 export async function currentUser(): Promise<User | null> {
   const jar = await cookies();
   const sessionId = jar.get(SESSION_COOKIE)?.value;
   if (!sessionId) return null;
   return (
     get<User>(
-      `SELECT u.* FROM users u
+      `SELECT ${USER_COLUMNS} FROM users u
          JOIN sessions s ON s.user_id = u.id
         WHERE s.id = ? AND s.expires_at > datetime('now')`,
       sessionId,

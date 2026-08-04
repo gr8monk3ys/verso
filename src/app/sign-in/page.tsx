@@ -20,11 +20,17 @@ export default async function SignInPage({
         {typeof next === "string" && <input type="hidden" name="next" value={next} />}
         <label className="block">
           <span className="label-caps">Handle or email</span>
-          <input name="identifier" className="field mt-1" autoCapitalize="none" required />
+          <input name="identifier" autoComplete="username" className="field mt-1" autoCapitalize="none" required />
         </label>
         <label className="block">
           <span className="label-caps">Password</span>
-          <input name="password" type="password" className="field mt-1" required />
+          <input
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            className="field mt-1"
+            required
+          />
         </label>
       </AuthForm>
 

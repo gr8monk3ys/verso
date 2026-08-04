@@ -286,6 +286,26 @@ CREATE TABLE IF NOT EXISTS watchlist (
   PRIMARY KEY (user_id, work_id)
 );
 
+-- The four works at the top of a profile. Letterboxd's most-copied element, and
+-- the reason a profile is worth linking to at all: four posters say more about a
+-- person than any number of stats.
+--
+-- Restricted to works the owner has logged, which is the one place Verso should
+-- differ. A favourite film is a film you have seen; a favourite work you have
+-- only seen in reproduction is an aspiration, and Verso already has a word for
+-- that — the watchlist. The constraint is enforced in favourites-store.mjs
+-- rather than here, because SQLite cannot express "a row exists in sightings"
+-- as a CHECK.
+CREATE TABLE IF NOT EXISTS favourites (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  work_id    INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  -- 1..4, kept contiguous so the grid never has a hole in it.
+  position   INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, work_id)
+);
+CREATE INDEX IF NOT EXISTS idx_favourites_user ON favourites(user_id, position);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id         INTEGER PRIMARY KEY,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -397,3 +417,46 @@ CREATE TABLE IF NOT EXISTS work_requests (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_work_requests_status ON work_requests(status, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Provenance of the rows in this database.
+--
+-- The §13 gates are computed by SQL over whatever is in here, and `db:demo`
+-- generates behaviour from tuned personas — so on a seeded database the gates
+-- measure the generator's assumptions, not a product. That distinction is
+-- invisible in a PASS, so it is recorded here and printed by `npm run metrics`.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- Artists.
+--
+-- Derived, not ingested: rebuilt from works by artist-store.mjs, because
+-- artist_display is a string and an artist is a person. See
+-- domain/artist-identity.mjs for why those differ and what is refused.
+--
+-- The Q-number is unique where present — it is the identity the museum asserted.
+-- Rows without one are keyed on a normalised name and keep their own page.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS artists (
+  id           INTEGER PRIMARY KEY,
+  slug         TEXT NOT NULL UNIQUE,
+  qid          TEXT UNIQUE,
+  display_name TEXT NOT NULL,
+  sort_name    TEXT NOT NULL DEFAULT '',
+  ulan         TEXT,
+  -- Denormalised so the browse and search paths do not count on every render.
+  work_count   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_artists_work_count ON artists(work_count DESC);
+CREATE INDEX IF NOT EXISTS idx_artists_sort ON artists(sort_name);
+
+CREATE TABLE IF NOT EXISTS work_artists (
+  work_id   INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
+  PRIMARY KEY (work_id, artist_id)
+);
+CREATE INDEX IF NOT EXISTS idx_work_artists_artist ON work_artists(artist_id);

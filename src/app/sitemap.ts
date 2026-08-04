@@ -24,6 +24,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: `${origin}/`, changeFrequency: "daily", priority: 1 },
+    { url: `${origin}/popular`, changeFrequency: "daily", priority: 0.8 },
+    { url: `${origin}/lists`, changeFrequency: "daily", priority: 0.6 },
+    { url: `${origin}/exhibitions`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${origin}/search`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${origin}/terms`, changeFrequency: "yearly", priority: 0.1 },
     { url: `${origin}/privacy`, changeFrequency: "yearly", priority: 0.1 },
@@ -31,7 +34,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const works = all<{ slug: string; updated_at: string; sightings: number }>(
     `SELECT w.slug, w.updated_at,
-            (SELECT COUNT(*) FROM sightings s WHERE s.work_id = w.id) AS sightings
+            (SELECT COUNT(*) FROM sightings s
+              WHERE s.work_id = w.id AND s.is_private = 0) AS sightings
        FROM works w
       ORDER BY sightings DESC, w.id
       LIMIT ?`,
@@ -43,6 +47,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // A work people have actually written about is worth more than an empty
     // catalogue row, and saying so is what a priority field is for.
     priority: work.sightings > 0 ? 0.8 : 0.4,
+  }));
+
+  // The film-page argument applies at least as strongly one level up: a person
+  // searching an artist's name is the likeliest visitor this site can win, and
+  // every artist page aggregates works and reviews nothing else ranks for.
+  const artists = all<{ slug: string; work_count: number }>(
+    "SELECT slug, work_count FROM artists ORDER BY work_count DESC",
+  ).map((artist) => ({
+    url: `${origin}/artist/${artist.slug}`,
+    changeFrequency: "weekly" as const,
+    priority: artist.work_count > 5 ? 0.7 : 0.5,
   }));
 
   const venues = all<{ slug: string }>("SELECT slug FROM venues").map((venue) => ({
@@ -68,5 +83,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...works, ...venues, ...exhibitions, ...people];
+  return [...staticPages, ...works, ...artists, ...venues, ...exhibitions, ...people];
 }

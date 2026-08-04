@@ -43,12 +43,25 @@ export function setTags(db, sightingId, tags) {
  * one. A replay may still carry a rating or review added on the device after
  * the first copy synced — the capture screen offers a rating seconds after
  * logging — so late values are applied and nulls never erase what is there.
+ *
+ * Idempotency is scoped to the owner, and that scope is load-bearing. client_uuid
+ * is minted on the device, so it reaches /api/sightings as attacker-controlled
+ * input: matched on the uuid alone, a signed-in user who supplied someone else's
+ * uuid would rewrite that person's rating, review and tags and be handed their
+ * row back. A uuid is only ever a replay of *your* own capture. Returns null when
+ * the uuid belongs to somebody else, which the caller reports as a rejection
+ * rather than retrying forever.
  */
 export function createSighting(db, input) {
   if (input.clientUuid) {
-    const existing = db
-      .prepare("SELECT * FROM sightings WHERE client_uuid = ?")
+    const owner = db
+      .prepare("SELECT user_id FROM sightings WHERE client_uuid = ?")
       .get(input.clientUuid);
+    if (owner && owner.user_id !== input.userId) return null;
+
+    const existing = db
+      .prepare("SELECT * FROM sightings WHERE client_uuid = ? AND user_id = ?")
+      .get(input.clientUuid, input.userId);
     if (existing) {
       const rating = input.rating ?? existing.rating;
       const review = (input.review ?? "").trim() || existing.review;

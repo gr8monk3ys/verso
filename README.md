@@ -13,6 +13,7 @@ capture, a social layer, and the metric gates that decide whether the whole idea
 is working.
 
 ```bash
+# Node 24+ — node:sqlite is stable there and `next start` needs no flags
 git clone https://github.com/gr8monk3ys/verso && cd verso
 npm install
 npm run db:reset && npm run db:seed && npm run db:demo
@@ -72,6 +73,7 @@ than assuming it — see [Metrics](#metrics).
 **Social**
 - Follows and an activity feed that floats reviews above bare logs
 - Public work pages: aggregate rating, distribution, popular reviews
+- Artist pages: the whole oeuvre on view, how much of it you've seen, reviews
 - Likes, comments, public lists, watchlist with an on-display alert
 - Exhibition pages with a sightings roll-up
 - Block and report, with a staff moderation queue
@@ -86,7 +88,9 @@ than assuming it — see [Metrics](#metrics).
 - Catalogue ingest from The Met and the Art Institute of Chicago
 - Wikidata reconciliation with a human review queue
 - Crowdsourced "on view" inference — sightings become display evidence
-- Live metric gates and a recognition guardrail
+- Live metric gates, and a catalogue guardrail measured against real ground truth
+- CSP with per-request nonces, hourly backups with a rehearsed restore, and a
+  preflight check that refuses to call an unready deployment ready
 - Institutional analytics under a k-anonymity floor
 
 ---
@@ -151,19 +155,34 @@ Verso ships with the decision thresholds from the PRD computed live, at
 npm run metrics
 ```
 
-```
-V0 gate — PASS
-  median works / active user / month             15.5   PASS (≥ 8)
-  30-day retention (logged in week 5)           37.5%   PASS (≥ 25.0%)
-  users logging on >1 day                      100.0%   PASS (≥ 40.0%)
+Two kinds of number, kept apart on purpose.
 
-Guardrail — PASS
-  recognition accuracy (n=1533)                 97.6%   PASS (≥ 95.0%)
+**The V0 and V1 gates describe users, and there are none.** On a seeded database
+they are computed from the personas in `scripts/lib/demo.mjs`, which are tuned to
+clear these thresholds — so `npm run metrics` prints a `GENERATED DATA` banner
+above them and the JSON carries `"dataset": "demo"`. They verify that the
+instrument works. They are not evidence about a product.
+
+**The guardrail describes the catalogue, and that is real.** The Met publishes its
+own Wikidata Q-number for each object, so the reconciler can be graded against
+ground truth: run it over real works, ask live Wikidata for candidates, and
+compare what it committed to against what the museum says.
+
+```bash
+npm run eval:catalogue          # live, a few minutes against WDQS
+npm run eval:catalogue:replay   # regrade the committed run, no network
 ```
 
-The guardrail exits non-zero. Catalogue match accuracy under 95% is defined as
-"stop feature work and fix the catalogue", and a check that stops nothing is not
-a guardrail.
+The result is committed to `data/eval/reconciliation.json` — a guardrail is only a
+guardrail if it is present on a fresh clone — and `npm run metrics` gates on it.
+An **unmeasured** guardrail fails rather than passing quietly: absence of evidence
+must not read as evidence.
+
+Recognition acceptance still gets reported, below the gates, labelled as
+telemetry. It used to be the guardrail, which was a mistake: it is computed from
+`recognition_events`, and on demo data those come from a hardcoded acceptance rate
+in the seeder, so the check could not fail. It becomes meaningful the day real
+people are tapping suggestions.
 
 ---
 
@@ -222,16 +241,22 @@ measurement rather than a claim.
 | | |
 |---|---|
 | `npm run dev` / `build` / `start` | the app |
-| `npm test` | 72 tests, no network, no fixtures on disk |
+| `npm test` | 116 tests, no network, no fixtures on disk |
 | `npm run check` | typecheck + tests + build |
 | `npm run verify` | `check` plus a seeded database and the metric gates |
 | `npm run db:reset` / `db:seed` / `db:demo` | database lifecycle |
 | `npm run ingest:met` / `ingest:aic` / `reconcile` | catalogue pipeline |
 | `npm run metrics` | the gates |
+| `npm run preflight` | is this safe to put strangers on? |
+| `npm run backup` / `backup:verify` / `backup:drill` | snapshot, checksum, rehearse a restore |
 
 ---
 
 ## Deployment
+
+For a systemd host, `ops/verso.service.example` is the app unit and
+`ops/verso.env.example` enumerates every variable below in one copy-editable
+file. By hand:
 
 ```bash
 VERSO_DB_PATH=/var/lib/verso/verso.db \
@@ -239,6 +264,24 @@ VERSO_MEDIA_DIR=/var/lib/verso/media \
 VERSO_BASE_URL=https://verso.example \
 VERSO_STAFF_BOOTSTRAP=your-handle \
 NODE_ENV=production npm run build && npm start
+```
+
+**Run `npm run preflight` first.** It checks the things that are fine on a laptop
+and lose users in production — mail that goes nowhere, no offsite backup, a demo
+dataset, a non-https origin — and exits non-zero if any of them would block a
+launch. `--send-test you@example.com` puts a real message through the configured
+transport, because a mail seam that has never delivered anything is not configured,
+it is merely set.
+
+```
+Verso preflight · NODE_ENV=production
+
+  ✗ mail            reset links go to the server log; a user who forgets their
+                    password is locked out until an operator reads it
+  ✗ backups         no offsite copy. The sightings and the on-view record cannot
+                    be rebuilt from anything
+  ...
+  4 blocking issues. Not ready for strangers.
 ```
 
 | Variable | Purpose |
@@ -250,6 +293,36 @@ NODE_ENV=production npm run build && npm start
 | `VERSO_MAIL` | `log` (default), `webhook`, or `none` |
 | `VERSO_MAIL_WEBHOOK` | POST target for outbound mail — Postmark, Resend, an SMTP bridge |
 | `VERSO_RECOGNITION` | `gallery-prior` (default), `http`, `none` |
+| `VERSO_ERROR_REPORTING` | `log` (default) or `webhook` |
+| `VERSO_ERROR_WEBHOOK` | POST target for server errors — Slack, Sentry relay, your own ingest |
+| `VERSO_BACKUP_DIR` | Where snapshots are written (default `data/backups`) |
+| `VERSO_BACKUP_HOOK` | Command run with the backup directory — the offsite copy |
+
+### Backups
+
+The catalogue rebuilds from The Met in fifteen seconds. The sightings, and the
+on-view record derived from them, rebuild from nothing.
+
+```bash
+npm run backup          # VACUUM INTO snapshot + photos + checksummed manifest
+npm run backup:verify   # re-checksum the newest one
+npm run backup:drill    # restore it somewhere harmless and check the row counts
+```
+
+`VACUUM INTO` rather than copying the file: under WAL a `cp` of `verso.db` can
+catch a torn state with committed transactions still in the `-wal`. Snapshots
+carry row counts and a SHA-256, and `restore` refuses a snapshot whose checksum
+does not match rather than overwriting a working database with a broken one.
+
+Hourly, with the offsite copy that makes it a backup rather than a second copy on
+the same failing disk:
+
+```
+0 * * * * cd /srv/verso && VERSO_BACKUP_HOOK=/srv/verso/offsite.sh node scripts/backup.mjs
+```
+
+**Run `npm run backup:drill` on a schedule too.** A backup nobody has restored is
+a rumour.
 
 `/api/health` returns 200 with the catalogue size, or 503 when the database is
 unreachable — point the load balancer at that rather than at `/`.

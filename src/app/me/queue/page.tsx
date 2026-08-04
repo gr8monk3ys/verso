@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/auth/session";
 import { unratedSightings } from "@/lib/domain/sightings";
 import { Plate } from "@/components/Plate";
 import { RateRow } from "@/components/RateRow";
-import { displayArtist, formatSeenOn } from "@/lib/format";
+import { displayArtist, displayTitle, formatSeenOn } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +49,7 @@ export default async function QueuePage() {
               </Link>
               <div className="min-w-0 flex-1">
                 <Link href={`/work/${sighting.work_slug}`} className="display block leading-tight">
-                  {sighting.work_title}
+                  {displayTitle(sighting.work_title)}
                 </Link>
                 <p className="truncate text-xs text-[var(--color-muted)]">
                   {displayArtist(sighting.work_artist)} ·{" "}

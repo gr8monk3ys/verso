@@ -54,9 +54,10 @@ export function pluralize(count: number, singular: string, plural?: string): str
   return `${count} ${count === 1 ? singular : (plural ?? `${singular}s`)}`;
 }
 
-/** Artist names arrive as "Vincent van Gogh" or "van Gogh, Vincent". */
-export function displayArtist(artist: string | null | undefined): string {
-  if (!artist) return "Unattributed";
-  const parts = artist.split(",").map((part) => part.trim());
-  return parts.length === 2 && parts[1] ? `${parts[1]} ${parts[0]}` : artist;
-}
+/**
+ * The catalogue's own fields — titles and artist credits — are unpacked in
+ * catalogue-fields.mjs, where the rules can be tested against real rows.
+ * Re-exported here so every screen keeps importing display helpers from one
+ * place.
+ */
+export { displayArtist, displayTitle, originalTitle } from "./catalogue-fields.mjs";

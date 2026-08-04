@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth/session";
 import { watchlistFor } from "@/lib/domain/lists";
 import { Plate } from "@/components/Plate";
-import { displayArtist } from "@/lib/format";
+import { displayArtist, displayTitle } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +63,7 @@ function Grid({
         <li key={item.work_id}>
           <Link href={`/work/${item.slug}`}>
             <Plate title={item.title} artist={item.artist_display} imageUrl={item.image_url} />
-            <p className="mt-1 truncate text-xs">{item.title}</p>
+            <p className="mt-1 truncate text-xs">{displayTitle(item.title)}</p>
             <p className="truncate text-[11px] text-[var(--color-muted)]">
               {item.venue_name ?? displayArtist(item.artist_display)}
             </p>

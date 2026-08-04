@@ -45,6 +45,12 @@ export async function POST(request: Request) {
     }
 
     const sighting = createSighting({ ...parsed, userId: user.id });
+    if (!sighting) {
+      // The uuid is already spoken for by another account. Permanent, so the
+      // client drops it instead of retrying — and it never reaches their row.
+      rejected.push({ clientUuid, error: "that client uuid belongs to another account" });
+      continue;
+    }
     created.push({ clientUuid, id: sighting.id });
 
     const recognition = (item as { recognition?: { rank?: number | null; topWorkId?: number | null; score?: number | null } })

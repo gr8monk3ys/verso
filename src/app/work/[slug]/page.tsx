@@ -13,33 +13,57 @@ import {
   whereIsIt,
   workBySlug,
 } from "@/lib/domain/works";
-import { activeVenues } from "@/lib/domain/venues";
-import { isWatched, listsForUser } from "@/lib/domain/lists";
+import { activeVenues, openExhibitionsAt } from "@/lib/domain/venues";
+import { artistsForWork } from "@/lib/domain/artists";
+import { isWatched, listsFeaturingWork, listsForUser } from "@/lib/domain/lists";
+import { MAX_FAVOURITES, favouriteCount, isFavourite } from "@/lib/domain/favourites";
 import { commentsFor, likedByUser } from "@/lib/domain/social";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
 import { LogForm } from "@/components/LogForm";
 import { SightingItem } from "@/components/SightingItem";
-import { displayArtist, formatSeenOn, pluralize, todayIso } from "@/lib/format";
-import { addToListAction, addCommentAction, toggleWatchAction } from "@/app/actions";
+import { displayArtist, displayTitle, formatSeenOn, originalTitle, pluralize, todayIso } from "@/lib/format";
+import {
+  addToListAction,
+  addCommentAction,
+  toggleFavouriteAction,
+  toggleWatchAction,
+} from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function WorkPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function WorkPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ favourite?: string }>;
+}) {
   const { slug } = await params;
+  const { favourite: favouriteError } = await searchParams;
   const work = workBySlug(slug);
   if (!work) notFound();
 
   const user = await currentUser();
   const summary = ratingSummary(work.id);
+  const makers = artistsForWork(work.id);
   const display = whereIsIt(work.id);
   const reviews = popularReviews(work.id, 8);
   const recent = recentSightingsForWork(work.id, 8);
   const tags = topTagsForWork(work.id);
   const related = relatedWorks(work, 6);
+  const inLists = listsFeaturingWork(work.id);
   const venues = activeVenues().map((venue) => ({ id: venue.id, name: venue.name }));
+  const logVenueId = display?.venue_id ?? work.home_venue_id ?? null;
+  // Mapped to fresh objects, same as venues above: node:sqlite rows are
+  // null-prototype, which a client component prop refuses to serialize.
+  const openShows = logVenueId
+    ? openExhibitionsAt(logVenueId).map((show) => ({ id: show.id, title: show.title }))
+    : [];
   const mine = user ? sightingsForUser(user.id, { workId: work.id, viewerId: user.id }) : [];
   const watched = user ? isWatched(user.id, work.id) : false;
+  const favourited = user ? isFavourite(user.id, work.id) : false;
+  const favouritesFull = user ? favouriteCount(user.id) >= MAX_FAVOURITES : false;
   const myLists = user ? listsForUser(user.id, user.id) : [];
   const liked = user ? likedByUser(user.id, reviews.map((review) => review.id)) : new Set<number>();
   const path = `/work/${work.slug}`;
@@ -52,9 +76,29 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
           <Plate title={work.title} artist={work.artist_display} imageUrl={work.image_url} />
         </div>
         <div className="min-w-0">
-          <h1 className="display text-2xl leading-tight md:text-3xl">{work.title}</h1>
+          <h1 className="display text-2xl leading-tight md:text-3xl">
+            {displayTitle(work.title)}
+          </h1>
+          {/* The work page is the one screen with room for the original script,
+              and the only place a reader can check the English against it. */}
+          {originalTitle(work.title) && (
+            <p className="mt-0.5 text-lg leading-tight text-[var(--color-muted)]">
+              {originalTitle(work.title)}
+            </p>
+          )}
           <p className="mt-1 text-[var(--color-muted)]">
-            {displayArtist(work.artist_display)}
+            {/* Linked where the maker resolved to an artist page; plain text for
+                the unattributed, which is 62% of what hangs at the Met. */}
+            {makers.length > 0
+              ? makers.map((maker, index) => (
+                  <span key={maker.id}>
+                    {index > 0 && ", "}
+                    <Link href={`/artist/${maker.slug}`} className="underline">
+                      {maker.display_name}
+                    </Link>
+                  </span>
+                ))
+              : displayArtist(work.artist_display)}
             {work.date_display ? ` · ${work.date_display}` : ""}
           </p>
           {work.medium && <p className="mt-1 text-sm text-[var(--color-muted)]">{work.medium}</p>}
@@ -106,10 +150,19 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
           <LogForm
             workId={work.id}
             venues={venues}
-            defaultVenueId={display?.venue_id ?? work.home_venue_id ?? null}
+            defaultVenueId={logVenueId}
             today={todayIso()}
             next={path}
+            exhibitions={openShows}
           />
+
+          {favouriteError && (
+            <p className="border rule bg-[var(--color-ink-soft)] px-4 py-2 text-sm">
+              {favouriteError === "full"
+                ? `Your favourites are full. Remove one on your profile to make room.`
+                : `You can only favourite a work you have logged.`}
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <form action={toggleWatchAction}>
@@ -119,6 +172,27 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
                 {watched ? "✓ On your watchlist" : "Want to see"}
               </button>
             </form>
+
+            {/* Only offered on a work you have logged — the top four is a record
+                of what you stood in front of, not a poster wall. */}
+            {mine.length > 0 && (
+              <form action={toggleFavouriteAction}>
+                <input type="hidden" name="work_id" value={work.id} />
+                <input type="hidden" name="next" value={path} />
+                {favourited && <input type="hidden" name="undo" value="1" />}
+                <button
+                  className={favourited ? "btn btn-ghost" : "btn"}
+                  disabled={!favourited && favouritesFull}
+                  title={
+                    !favourited && favouritesFull
+                      ? `You have ${MAX_FAVOURITES} favourites. Remove one on your profile first.`
+                      : undefined
+                  }
+                >
+                  {favourited ? "★ A favourite" : "☆ Favourite"}
+                </button>
+              </form>
+            )}
 
             {myLists.length > 0 && (
               <form action={addToListAction} className="flex gap-2">
@@ -222,6 +296,22 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
         )}
       </section>
 
+      {inLists.length > 0 && (
+        <section className="mt-8">
+          <h2 className="label-caps mb-2">Appears in lists</h2>
+          <ul className="space-y-1 text-sm">
+            {inLists.map((list) => (
+              <li key={list.id}>
+                <Link href={`/u/${list.handle}/list/${list.slug}`}>{list.title}</Link>{" "}
+                <span className="text-xs text-[var(--color-muted)]">
+                  @{list.handle} · {pluralize(list.item_count, "work")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {recent.length > 0 && (
         <section className="mt-8">
           <h2 className="label-caps mb-2">Recently seen by</h2>
@@ -250,7 +340,7 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
                     artist={item.artist_display}
                     imageUrl={item.image_url}
                   />
-                  <p className="mt-1 truncate text-xs">{item.title}</p>
+                  <p className="mt-1 truncate text-xs">{displayTitle(item.title)}</p>
                 </Link>
               </li>
             ))}

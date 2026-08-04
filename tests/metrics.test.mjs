@@ -19,7 +19,7 @@ test("the gate verdict is exactly the §13 thresholds", () => {
       multiDayLoggerShare: 0.4,
     },
     v1: { ratedShare: 0.3, reviewedShare: 0.1, medianFollows: 5, medianFeedOpensPerWeek: 3 },
-    guardrail: { recognitionAccuracy: 0.95 },
+    guardrail: { catalogueMatchAccuracy: 0.95 },
   });
   assert.ok(passing.v0.pass, "thresholds are inclusive");
   assert.ok(passing.v1.pass);
@@ -32,7 +32,7 @@ test("the gate verdict is exactly the §13 thresholds", () => {
       multiDayLoggerShare: 0.4,
     },
     v1: { ratedShare: 0.3, reviewedShare: 0.1, medianFollows: 5, medianFeedOpensPerWeek: 3 },
-    guardrail: { recognitionAccuracy: 0.949 },
+    guardrail: { catalogueMatchAccuracy: 0.949 },
   });
   assert.equal(failing.v0.pass, false, "R1 is the whole bet; it does not round up");
   assert.equal(failing.guardrail.pass, false);
@@ -77,7 +77,7 @@ test("rating and review attach rates come from all sightings", () => {
   assert.equal(metrics.v1.reviewedShare, 0.2);
 });
 
-test("the recognition guardrail counts corrections against accuracy", () => {
+test("recognition acceptance is reported as telemetry, and never gates", () => {
   const db = testDb();
   const user = addUser(db, "jo");
   const work = addWork(db, "w1");
@@ -88,10 +88,35 @@ test("the recognition guardrail counts corrections against accuracy", () => {
   for (let i = 0; i < 19; i++) insert.run(user, work, work, 0, 0.9);
   insert.run(user, work, work, 1, 0.9); // user picked an alternate
 
-  const metrics = computeMetrics(db);
-  assert.equal(metrics.guardrail.recognitionAccuracy, 0.95);
-  assert.equal(metrics.guardrail.recognitionSample, 20);
+  // Still computed — it is real once real people are tapping suggestions.
+  const metrics = computeMetrics(db, {
+    catalogueEval: { precision: 0.97, sampled: 120, generatedAt: "2026-07-29", source: "test" },
+  });
+  assert.equal(metrics.telemetry.recognitionAcceptance, 0.95);
+  assert.equal(metrics.telemetry.recognitionSample, 20);
+  // ...but it is not among the guardrail checks, so it cannot stop a release.
+  assert.deepEqual(Object.keys(metrics.verdict.guardrail.checks), ["catalogueMatchAccuracy"]);
   assert.ok(metrics.verdict.guardrail.pass);
+});
+
+test("an unmeasured catalogue guardrail fails rather than passing quietly", () => {
+  // The whole point of moving off the seeded number: absence of evidence must not
+  // read as evidence. A fresh checkout with no evaluation artifact does not ship.
+  const db = testDb();
+  const metrics = computeMetrics(db);
+  assert.equal(metrics.guardrail.catalogueMatchAccuracy, null);
+  assert.equal(metrics.verdict.guardrail.checks.catalogueMatchAccuracy.measured, false);
+  assert.equal(metrics.verdict.guardrail.pass, false);
+});
+
+test("the catalogue guardrail gates on the measured value", () => {
+  const db = testDb();
+  const at = { sampled: 120, generatedAt: "2026-07-29", source: "wikidata-live" };
+  const pass = computeMetrics(db, { catalogueEval: { precision: 0.95, ...at } });
+  const fail = computeMetrics(db, { catalogueEval: { precision: 0.9499, ...at } });
+  assert.ok(pass.verdict.guardrail.pass, "the threshold is inclusive");
+  assert.equal(fail.verdict.guardrail.pass, false);
+  assert.equal(pass.guardrail.catalogueSample, 120);
 });
 
 test("gate thresholds match the document", () => {
@@ -102,5 +127,5 @@ test("gate thresholds match the document", () => {
   assert.equal(GATES.v1.reviewedShare, 0.1);
   assert.equal(GATES.v1.medianFollows, 5);
   assert.equal(GATES.v1.medianFeedOpensPerWeek, 3);
-  assert.equal(GATES.guardrail.recognitionAccuracy, 0.95);
+  assert.equal(GATES.guardrail.catalogueMatchAccuracy, 0.95);
 });

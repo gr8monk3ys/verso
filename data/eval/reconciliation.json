@@ -1,0 +1,71 @@
+{
+  "generatedAt": "2026-07-30T03:38:14.868Z",
+  "source": "wikidata-live",
+  "sampled": 40,
+  "thresholds": {
+    "autoAccept": 0.92,
+    "reviewFloor": 0.7
+  },
+  "arms": {
+    "label": {
+      "examined": 40,
+      "accepted": 3,
+      "acceptedCorrect": 3,
+      "acceptedWrong": 0,
+      "queued": 2,
+      "queuedContainingTruth": 2,
+      "unmatched": 35,
+      "errors": 0,
+      "groundTruthConflict": 0,
+      "attributed": {
+        "examined": 20,
+        "accepted": 3,
+        "acceptedCorrect": 3,
+        "acceptedWrong": 0,
+        "groundTruthConflict": 0
+      },
+      "anonymous": {
+        "examined": 20,
+        "accepted": 0,
+        "acceptedCorrect": 0,
+        "acceptedWrong": 0,
+        "groundTruthConflict": 0
+      },
+      "precision": 1,
+      "coverage": 0.075,
+      "measuredAt": "2026-07-30T03:38:14.869Z",
+      "source": "wikidata-live"
+    },
+    "accession": {
+      "examined": 120,
+      "accepted": 120,
+      "acceptedCorrect": 119,
+      "acceptedWrong": 0,
+      "queued": 0,
+      "queuedContainingTruth": 0,
+      "unmatched": 0,
+      "errors": 0,
+      "groundTruthConflict": 1,
+      "attributed": {
+        "examined": 60,
+        "accepted": 60,
+        "acceptedCorrect": 59,
+        "acceptedWrong": 0,
+        "groundTruthConflict": 1
+      },
+      "anonymous": {
+        "examined": 60,
+        "accepted": 60,
+        "acceptedCorrect": 60,
+        "acceptedWrong": 0,
+        "groundTruthConflict": 0
+      },
+      "precision": 1,
+      "coverage": 0.9916666666666667,
+      "measuredAt": "2026-07-30T03:35:18.354Z",
+      "source": "wikidata-live"
+    }
+  },
+  "misses": [],
+  "conflicts": []
+}

@@ -1,0 +1,40 @@
+# Hourly backup, with the restore rehearsal that makes it mean something.
+#
+#   cp ops/verso-backup.* /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now verso-backup.timer
+#
+# WorkingDirectory is load-bearing: schema.sql is read relative to it. If you run
+# Verso from somewhere else, set VERSO_SCHEMA_PATH instead of guessing.
+
+[Unit]
+Description=Verso backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=verso
+WorkingDirectory=/srv/verso
+Environment=NODE_ENV=production
+Environment=VERSO_DB_PATH=/var/lib/verso/verso.db
+Environment=VERSO_MEDIA_DIR=/var/lib/verso/media
+Environment=VERSO_BACKUP_DIR=/var/lib/verso/backups
+Environment=VERSO_BACKUP_HOOK=/srv/verso/ops/offsite.sh
+Environment=VERSO_BACKUP_KEEP=24
+ExecStart=/usr/bin/node scripts/backup.mjs
+
+# The drill. A backup nobody has restored is a rumour, and the cheapest moment to
+# discover a broken one is now rather than during the incident. Restores into a
+# throwaway directory and fails the unit if the row counts disagree.
+ExecStartPost=/usr/bin/node scripts/restore.mjs --latest --into /tmp/verso-restore-drill
+ExecStopPost=/bin/rm -rf /tmp/verso-restore-drill
+
+# It only ever reads the database and writes the backup directory.
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/verso /tmp
+
+[Install]
+WantedBy=multi-user.target

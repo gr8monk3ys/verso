@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/auth/session";
 import { userByHandle } from "@/lib/domain/social";
 import { profileStats } from "@/lib/domain/stats";
 import { Stars } from "@/components/Stars";
-import { displayArtist, pluralize } from "@/lib/format";
+import { displayArtist, displayTitle, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +92,7 @@ export default async function StatsPage({ params }: { params: Promise<{ handle: 
             {stats.mostRevisited.map((work) => (
               <li key={work.slug} className="flex justify-between gap-4">
                 <Link href={`/work/${work.slug}`} className="truncate">
-                  {work.title}{" "}
+                  {displayTitle(work.title)}{" "}
                   <span className="text-[var(--color-muted)]">
                     {displayArtist(work.artist_display)}
                   </span>

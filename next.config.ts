@@ -3,11 +3,10 @@ import type { NextConfig } from "next";
 /**
  * Security headers.
  *
- * No Content-Security-Policy here on purpose: Next's App Router injects inline
- * bootstrap scripts, so a CSP needs per-request nonces threaded through
- * middleware to be worth anything, and a CSP with `unsafe-inline` is
- * decoration. That is a deliberate follow-up, noted in the README, not an
- * oversight.
+ * The Content-Security-Policy is *not* here: it carries a per-request nonce, so it
+ * is built in src/middleware.ts where a request exists. These are the headers whose
+ * value never varies. X-Frame-Options stays as the fallback for browsers that
+ * predate CSP's frame-ancestors, which supersedes it where both are understood.
  *
  * Permissions-Policy allows the camera because the capture screen is a
  * viewfinder (§9.1), and denies the rest — Verso has no reason to ask for a
@@ -28,6 +27,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // node:sqlite is a Node builtin; keep it out of the bundler's hands.
   serverExternalPackages: ["node:sqlite"],
+  // Without this, Next infers the workspace root by walking up for lockfiles
+  // and can land on one in the home directory — which silently changes what
+  // file tracing includes in a production build.
+  outputFileTracingRoot: __dirname,
   poweredByHeader: false,
   experimental: {
     // Sightings can carry a user photo; keep the server action limit generous.

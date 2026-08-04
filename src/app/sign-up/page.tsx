@@ -19,6 +19,7 @@ export default async function SignUpPage() {
           <span className="label-caps">Handle</span>
           <input
             name="handle"
+            autoComplete="username"
             className="field mt-1"
             autoCapitalize="none"
             placeholder="priya"
@@ -27,17 +28,18 @@ export default async function SignUpPage() {
         </label>
         <label className="block">
           <span className="label-caps">Name</span>
-          <input name="display_name" className="field mt-1" placeholder="Priya Raghunathan" />
+          <input name="display_name" autoComplete="name" className="field mt-1" placeholder="Priya Raghunathan" />
         </label>
         <label className="block">
           <span className="label-caps">Email (optional)</span>
-          <input name="email" type="email" className="field mt-1" autoCapitalize="none" />
+          <input name="email" type="email" autoComplete="email" className="field mt-1" autoCapitalize="none" />
         </label>
         <label className="block">
           <span className="label-caps">Password</span>
           <input
             name="password"
             type="password"
+            autoComplete="new-password"
             className="field mt-1"
             minLength={8}
             required

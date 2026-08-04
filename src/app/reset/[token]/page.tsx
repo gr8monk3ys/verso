@@ -44,6 +44,7 @@ export default async function ResetPage({
           <input
             name="password"
             type="password"
+            autoComplete="new-password"
             className="field mt-1"
             minLength={8}
             required

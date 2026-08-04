@@ -5,10 +5,14 @@ import { usePathname } from "next/navigation";
 
 type NavUser = { handle: string; display_name: string } | null;
 
+// Six, with Log in the middle so it stays under the thumb on the mobile bar.
+// Popular earns a slot because every other route into the catalogue requires
+// already knowing what you are looking for.
 const ITEMS = [
   { href: "/", label: "Feed", glyph: "▤" },
-  { href: "/search", label: "Search", glyph: "⌕" },
+  { href: "/popular", label: "Popular", glyph: "▲" },
   { href: "/capture", label: "Log", glyph: "◎", primary: true },
+  { href: "/search", label: "Search", glyph: "⌕" },
   { href: "/me/queue", label: "To rate", glyph: "☆" },
   { href: "/me", label: "You", glyph: "◈" },
 ];
@@ -23,8 +27,11 @@ export function Nav({
   unrated: number;
 }) {
   const pathname = usePathname();
+  // "/me" has to match exactly or it also lights up on "/me/queue", which sits
+  // next to it in the bar — two tabs highlighted at once reads as a bug.
+  const EXACT = new Set(["/", "/me"]);
   const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+    EXACT.has(href) ? pathname === href : pathname.startsWith(href);
 
   return (
     <>

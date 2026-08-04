@@ -270,5 +270,11 @@ export function userByHandle(handle: string) {
     home_city: string | null;
     is_private: number;
     created_at: string;
-  }>("SELECT * FROM users WHERE handle = ?", handle.toLowerCase());
+    // Named columns, not `*`: this is a public profile lookup by handle, so
+    // password_hash and email must not ride along on the object at all.
+  }>(
+    `SELECT id, handle, display_name, bio, home_city, is_private, created_at
+       FROM users WHERE handle = ?`,
+    handle.toLowerCase(),
+  );
 }

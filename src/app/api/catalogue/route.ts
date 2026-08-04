@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { all } from "@/lib/db";
 import { searchWorks } from "@/lib/domain/works";
 import { venueBySlug } from "@/lib/domain/venues";
+import { displayArtist, displayTitle } from "@/lib/format";
 
 /**
  * Two jobs:
@@ -35,8 +36,15 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         venue: { id: venue.id, slug: venue.slug, name: venue.name },
+        // Normalised here rather than in the capture screen, so the offline
+        // copy in IndexedDB is already display-ready — the client never sees a
+        // raw catalogue field. The haystack keeps the *original* strings as
+        // well, so searching a work by its Chinese title still works in a
+        // basement even though the card shows the English one.
         works: works.map((work) => ({
           ...work,
+          title: displayTitle(work.title),
+          artist: displayArtist(work.artist),
           haystack: `${work.title} ${work.artist}`.toLowerCase(),
         })),
       },
@@ -55,8 +63,8 @@ export async function GET(request: Request) {
     results: results.map((work) => ({
       id: work.id,
       slug: work.slug,
-      title: work.title,
-      artist: work.artist_display,
+      title: displayTitle(work.title),
+      artist: displayArtist(work.artist_display),
       date: work.date_display,
       venue: work.venue_name,
       gallery: work.location_label,
