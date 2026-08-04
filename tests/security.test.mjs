@@ -7,7 +7,12 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { addUser, addVenue, addWork, testDb } from "./helpers.mjs";
-import { createSighting } from "../src/lib/domain/sighting-store.mjs";
+import {
+  createSighting,
+  sightingPatchFromForm,
+  sightingVisibility,
+  updateSighting,
+} from "../src/lib/domain/sighting-store.mjs";
 
 const SCHEMA = readFileSync(path.join("src", "lib", "db", "schema.sql"), "utf8");
 
@@ -121,6 +126,113 @@ test("a private diary's sightings stay out of other people's views", () => {
   const shy = addUser(db, "shy", { isPrivate: true });
   const row = db.prepare("SELECT is_private FROM users WHERE id = ?").get(shy);
   assert.equal(row.is_private, 1);
+});
+
+test("a sighting on a private account is private however the sighting is flagged", () => {
+  // Regression: the profile page showed a closed door while /sighting/<id> —
+  // a sequential, enumerable URL — served the review, rating, handle and venue
+  // of a private account's sighting. The page must resolve visibility the way
+  // the photograph route already does: the sighting inherits its owner's
+  // account privacy.
+  const db = testDb();
+  const shy = addUser(db, "shy", { isPrivate: true });
+  const venue = addVenue(db, "met");
+  const work = addWork(db, "the-harvesters", { venueId: venue });
+
+  const sighting = createSighting(db, {
+    userId: shy, workId: work, venueId: venue,
+    rating: 9, review: "Not for strangers.",
+  });
+
+  const access = sightingVisibility(db, sighting.id);
+  assert.equal(access.ownerId, shy);
+  assert.equal(access.isPrivate, true, "owner-private makes the sighting page owner-only");
+});
+
+test("sighting visibility: own flag, public case, and a missing row", () => {
+  const db = testDb();
+  const open = addUser(db, "open");
+  const work = addWork(db, "vermeer");
+
+  const flagged = createSighting(db, { userId: open, workId: work, isPrivate: true });
+  assert.equal(sightingVisibility(db, flagged.id).isPrivate, true);
+
+  const publicOne = createSighting(db, { userId: open, workId: work });
+  assert.equal(sightingVisibility(db, publicOne.id).isPrivate, false);
+
+  assert.equal(sightingVisibility(db, 999999), null, "no row, no answer — the page 404s");
+});
+
+// ------------------------------------------------------- partial-form writes ---
+
+test("rating from the queue leaves the privacy fields untouched", () => {
+  // Regression: updateSightingAction wrote is_private and private_note
+  // unconditionally, so the queue's RateRow — which posts only a rating —
+  // flipped a private sighting public and erased its private note on save.
+  const db = testDb();
+  const user = addUser(db, "priya");
+  const work = addWork(db, "rothko");
+  const sighting = createSighting(db, {
+    userId: user, workId: work,
+    privateNote: "met the curator at the opening", isPrivate: true,
+  });
+
+  // Exactly what RateRow posts: the id, the return path, a rating.
+  const form = new FormData();
+  form.set("sighting_id", String(sighting.id));
+  form.set("next", "/me/queue");
+  form.set("rating", "8");
+
+  const patch = sightingPatchFromForm(form);
+  assert.equal(patch.isPrivate, undefined, "a field the form never rendered has no opinion");
+  assert.equal(patch.privateNote, undefined);
+  assert.equal(patch.review, undefined);
+
+  updateSighting(db, sighting.id, user, patch);
+  const after = db.prepare("SELECT * FROM sightings WHERE id = ?").get(sighting.id);
+  assert.equal(after.rating, 8, "the rating lands");
+  assert.equal(after.is_private, 1, "rating a sighting must not publish it");
+  assert.equal(after.private_note, "met the curator at the opening");
+});
+
+test("fields the form does post still write, including explicit clears", () => {
+  // The guard must not make fields sticky: posting a field is an opinion,
+  // posting it empty is a clear, and the checkbox present means checked.
+  const db = testDb();
+  const user = addUser(db, "tom");
+  const work = addWork(db, "hopper");
+  const sighting = createSighting(db, {
+    userId: user, workId: work, privateNote: "old note", review: "old review",
+  });
+
+  const form = new FormData();
+  form.set("sighting_id", String(sighting.id));
+  form.set("private_note", "");
+  form.set("review", "new review");
+  form.set("is_private", "on");
+
+  updateSighting(db, sighting.id, user, sightingPatchFromForm(form));
+  const after = db.prepare("SELECT * FROM sightings WHERE id = ?").get(sighting.id);
+  assert.equal(after.private_note, null, "an empty posted field is a deliberate clear");
+  assert.equal(after.review, "new review");
+  assert.equal(after.is_private, 1);
+});
+
+test("a partial-form patch never writes someone else's sighting", () => {
+  const db = testDb();
+  const owner = addUser(db, "owner");
+  const other = addUser(db, "other");
+  const work = addWork(db, "goya");
+  const sighting = createSighting(db, { userId: owner, workId: work, rating: 10 });
+
+  const form = new FormData();
+  form.set("rating", "1");
+  const result = updateSighting(db, sighting.id, other, sightingPatchFromForm(form));
+  assert.equal(result, undefined);
+  assert.equal(
+    db.prepare("SELECT rating FROM sightings WHERE id = ?").get(sighting.id).rating,
+    10,
+  );
 });
 
 // ---------------------------------------------------------- replay safety ---

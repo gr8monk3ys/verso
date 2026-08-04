@@ -10,7 +10,12 @@ import {
   registerUser,
   setSessionCookie,
 } from "@/lib/auth/session";
-import { createSighting, deleteSighting, updateSighting } from "@/lib/domain/sightings";
+import {
+  createSighting,
+  deleteSighting,
+  sightingPatchFromForm,
+  updateSighting,
+} from "@/lib/domain/sightings";
 import { parseSightingForm } from "@/lib/domain/sighting-form";
 import {
   addComment,
@@ -31,11 +36,6 @@ async function actor() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
   return user;
-}
-
-function emptyToNull(value: FormDataEntryValue | null): string | null {
-  const text = value == null ? "" : String(value).trim();
-  return text === "" ? null : text;
 }
 
 // ------------------------------------------------------------------ auth ---
@@ -128,20 +128,12 @@ export async function logSightingAction(formData: FormData) {
 export async function updateSightingAction(formData: FormData) {
   const user = await actor();
   const id = Number(formData.get("sighting_id"));
-  const ratingRaw = emptyToNull(formData.get("rating"));
-  updateSighting(id, user.id, {
-    rating: ratingRaw == null ? null : Number(ratingRaw),
-    review: emptyToNull(formData.get("review")),
-    privateNote: emptyToNull(formData.get("private_note")),
-    seenOn: formData.has("seen_on") ? emptyToNull(formData.get("seen_on")) : undefined,
-    tags: formData.has("tags")
-      ? String(formData.get("tags") ?? "")
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean)
-      : undefined,
-    isPrivate: formData.get("is_private") === "on",
-  });
+  // Only the fields the form posted. This action serves partial forms — the
+  // queue's RateRow posts nothing but a rating — and a field a form never
+  // rendered must not be written back as its empty value: that flipped
+  // private sightings public and erased private notes when rating from the
+  // queue.
+  updateSighting(id, user.id, sightingPatchFromForm(formData));
   revalidatePath("/me/queue");
   revalidatePath(`/u/${user.handle}`);
   const next = String(formData.get("next") ?? "");

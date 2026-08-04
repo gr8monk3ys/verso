@@ -99,31 +99,40 @@ export function updateSighting(
     >
   >,
 ): Sighting | undefined {
-  const existing = get<Sighting>(
-    "SELECT * FROM sightings WHERE id = ? AND user_id = ?",
-    id,
-    userId,
-  );
-  if (!existing) return undefined;
+  // The write itself lives in sighting-store.mjs so the test suite can prove
+  // that undefined patch fields preserve what is stored.
+  return store.updateSighting(db(), id, userId, patch) as Sighting | undefined;
+}
 
-  run(
-    `UPDATE sightings
-        SET rating = ?, review = ?, private_note = ?, seen_on = ?, date_precision = ?,
-            is_private = ?, updated_at = datetime('now')
-      WHERE id = ? AND user_id = ?`,
-    patch.rating === undefined ? existing.rating : patch.rating,
-    patch.review === undefined ? existing.review : patch.review?.trim() || null,
-    patch.privateNote === undefined
-      ? existing.private_note
-      : patch.privateNote?.trim() || null,
-    patch.seenOn === undefined ? existing.seen_on : patch.seenOn,
-    patch.datePrecision ?? existing.date_precision,
-    patch.isPrivate === undefined ? existing.is_private : patch.isPrivate ? 1 : 0,
-    id,
-    userId,
-  );
-  if (patch.tags) setTags(id, patch.tags);
-  return get<Sighting>("SELECT * FROM sightings WHERE id = ?", id);
+export type SightingPatch = Partial<
+  Pick<
+    SightingInput,
+    "rating" | "review" | "privateNote" | "tags" | "seenOn" | "datePrecision" | "isPrivate"
+  >
+>;
+
+/**
+ * Patch out of a form, containing only the fields the form actually posted.
+ * Partial forms (the queue's RateRow) must not clobber privacy fields they
+ * never rendered — see sighting-store.mjs.
+ */
+export function sightingPatchFromForm(formData: FormData): SightingPatch {
+  return store.sightingPatchFromForm(formData) as SightingPatch;
+}
+
+/**
+ * Whether a sighting is visible to anyone but its owner. Same rule as
+ * photoViewer below: the sighting inherits its owner's account privacy,
+ * because a private diary must not be readable one enumerable /sighting URL
+ * below the closed door on the profile. Null when the sighting doesn't exist.
+ */
+export function sightingVisibility(
+  id: number,
+): { ownerId: number; isPrivate: boolean } | null {
+  return store.sightingVisibility(db(), id) as {
+    ownerId: number;
+    isPrivate: boolean;
+  } | null;
 }
 
 /**
