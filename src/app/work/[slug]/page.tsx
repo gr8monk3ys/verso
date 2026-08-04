@@ -13,9 +13,9 @@ import {
   whereIsIt,
   workBySlug,
 } from "@/lib/domain/works";
-import { activeVenues } from "@/lib/domain/venues";
+import { activeVenues, openExhibitionsAt } from "@/lib/domain/venues";
 import { artistsForWork } from "@/lib/domain/artists";
-import { isWatched, listsForUser } from "@/lib/domain/lists";
+import { isWatched, listsFeaturingWork, listsForUser } from "@/lib/domain/lists";
 import { MAX_FAVOURITES, favouriteCount, isFavourite } from "@/lib/domain/favourites";
 import { commentsFor, likedByUser } from "@/lib/domain/social";
 import { Plate } from "@/components/Plate";
@@ -52,7 +52,14 @@ export default async function WorkPage({
   const recent = recentSightingsForWork(work.id, 8);
   const tags = topTagsForWork(work.id);
   const related = relatedWorks(work, 6);
+  const inLists = listsFeaturingWork(work.id);
   const venues = activeVenues().map((venue) => ({ id: venue.id, name: venue.name }));
+  const logVenueId = display?.venue_id ?? work.home_venue_id ?? null;
+  // Mapped to fresh objects, same as venues above: node:sqlite rows are
+  // null-prototype, which a client component prop refuses to serialize.
+  const openShows = logVenueId
+    ? openExhibitionsAt(logVenueId).map((show) => ({ id: show.id, title: show.title }))
+    : [];
   const mine = user ? sightingsForUser(user.id, { workId: work.id, viewerId: user.id }) : [];
   const watched = user ? isWatched(user.id, work.id) : false;
   const favourited = user ? isFavourite(user.id, work.id) : false;
@@ -143,9 +150,10 @@ export default async function WorkPage({
           <LogForm
             workId={work.id}
             venues={venues}
-            defaultVenueId={display?.venue_id ?? work.home_venue_id ?? null}
+            defaultVenueId={logVenueId}
             today={todayIso()}
             next={path}
+            exhibitions={openShows}
           />
 
           {favouriteError && (
@@ -287,6 +295,22 @@ export default async function WorkPage({
           ))
         )}
       </section>
+
+      {inLists.length > 0 && (
+        <section className="mt-8">
+          <h2 className="label-caps mb-2">Appears in lists</h2>
+          <ul className="space-y-1 text-sm">
+            {inLists.map((list) => (
+              <li key={list.id}>
+                <Link href={`/u/${list.handle}/list/${list.slug}`}>{list.title}</Link>{" "}
+                <span className="text-xs text-[var(--color-muted)]">
+                  @{list.handle} · {pluralize(list.item_count, "work")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {recent.length > 0 && (
         <section className="mt-8">

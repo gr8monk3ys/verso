@@ -54,6 +54,64 @@ export function listBySlug(userId: number, slug: string) {
   return get<List>("SELECT * FROM lists WHERE user_id = ? AND slug = ?", userId, slug);
 }
 
+export type BrowseList = List & {
+  handle: string;
+  display_name: string;
+  item_count: number;
+};
+
+/**
+ * Every list a stranger may see: public lists from public accounts.
+ *
+ * Ordered by last edit rather than by any popularity signal, because lists have
+ * no likes to rank by and recency is the honest default for a small instance —
+ * a list somebody touched this week is alive; a ranking that pretended more
+ * would be the popular-chart mistake again, a chart that does not discriminate.
+ */
+export function publicLists(limit = 40, offset = 0): BrowseList[] {
+  return all<BrowseList>(
+    `SELECT l.*, u.handle, u.display_name,
+            (SELECT COUNT(*) FROM list_items i WHERE i.list_id = l.id) AS item_count
+       FROM lists l JOIN users u ON u.id = l.user_id
+      WHERE l.is_public = 1 AND u.is_private = 0
+      ORDER BY l.updated_at DESC, l.id DESC
+      LIMIT ? OFFSET ?`,
+    limit,
+    offset,
+  );
+}
+
+/**
+ * Lists a work appears in — discovery in the direction people actually travel:
+ * from a work they liked to the company other people put it in.
+ */
+export function listsFeaturingWork(workId: number, limit = 6): BrowseList[] {
+  return all<BrowseList>(
+    `SELECT l.*, u.handle, u.display_name,
+            (SELECT COUNT(*) FROM list_items i WHERE i.list_id = l.id) AS item_count
+       FROM list_items li
+       JOIN lists l ON l.id = li.list_id
+       JOIN users u ON u.id = l.user_id
+      WHERE li.work_id = ? AND l.is_public = 1 AND u.is_private = 0
+      ORDER BY l.updated_at DESC
+      LIMIT ?`,
+    workId,
+    limit,
+  );
+}
+
+/** A few covers to give a list row a face. */
+export function listPreviewWorks(listId: number, limit = 4) {
+  return all<{ id: number; slug: string; title: string; artist_display: string; image_url: string | null }>(
+    `SELECT w.id, w.slug, w.title, w.artist_display, w.image_url
+       FROM list_items i JOIN works w ON w.id = i.work_id
+      WHERE i.list_id = ?
+      ORDER BY i.position LIMIT ?`,
+    listId,
+    limit,
+  );
+}
+
 export function listItems(listId: number) {
   return all<{
     id: number;
@@ -105,17 +163,6 @@ export function reorderList(listId: number, orderedItemIds: number[]) {
 
 export function deleteList(listId: number, userId: number) {
   run("DELETE FROM lists WHERE id = ? AND user_id = ?", listId, userId);
-}
-
-export function publicLists(limit = 20) {
-  return all<List & { item_count: number; handle: string; display_name: string }>(
-    `SELECT l.*, u.handle, u.display_name,
-            (SELECT COUNT(*) FROM list_items i WHERE i.list_id = l.id) AS item_count
-       FROM lists l JOIN users u ON u.id = l.user_id
-      WHERE l.is_public = 1 AND u.is_private = 0
-      ORDER BY l.updated_at DESC LIMIT ?`,
-    limit,
-  );
 }
 
 // ------------------------------------------------------------- watchlist ---

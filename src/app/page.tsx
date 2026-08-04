@@ -231,6 +231,11 @@ async function Landing() {
               <li className="text-[var(--color-muted)]">Nothing listed yet.</li>
             )}
           </ul>
+          <p className="mt-3 text-xs">
+            <Link href="/exhibitions" className="text-[var(--color-muted)] underline">
+              All exhibitions →
+            </Link>
+          </p>
         </div>
       </section>
     </div>

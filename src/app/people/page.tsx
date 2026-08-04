@@ -90,6 +90,11 @@ export default async function PeoplePage() {
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-xs">
+            <Link href="/lists" className="text-[var(--color-muted)] underline">
+              All lists →
+            </Link>
+          </p>
         </section>
       )}
     </div>

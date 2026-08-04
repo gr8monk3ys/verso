@@ -29,12 +29,21 @@ export function LogForm({
   defaultVenueId,
   today,
   next,
+  exhibitions = [],
 }: {
   workId: number;
   venues: { id: number; name: string }[];
   defaultVenueId: number | null;
   today: string;
   next: string;
+  /**
+   * Shows currently open at the work's venue. Optional and usually empty —
+   * but this select is the only way a sighting ever reaches an exhibition, and
+   * exhibition pages build their object lists from those sightings. Before it
+   * existed the whole exhibition surface was fed exclusively by the demo
+   * seeder writing the column directly: a feature no real user could exercise.
+   */
+  exhibitions?: { id: number; title: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [precision, setPrecision] = useState<"day" | "month" | "year" | "unknown">("day");
@@ -101,6 +110,20 @@ export function LogForm({
           ))}
         </select>
       </label>
+
+      {exhibitions.length > 0 && (
+        <label className="block">
+          <span className="label-caps">Part of a show?</span>
+          <select name="exhibition_id" defaultValue="" className="field mt-1">
+            <option value="">No — the permanent collection</option>
+            {exhibitions.map((show) => (
+              <option key={show.id} value={show.id}>
+                {show.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <label className="block">
         <span className="label-caps">Review</span>

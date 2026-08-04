@@ -18,9 +18,11 @@ import { slugify } from "../src/lib/text.mjs";
 import { seedDemo } from "./lib/demo.mjs";
 import { flagDuplicateQids } from "../src/lib/domain/reconciliation.mjs";
 import { buildArtists } from "../src/lib/domain/artist-store.mjs";
+import { loadExhibitions } from "./ingest/exhibitions.mjs";
 
 const SEED_DIR = path.join("data", "seed");
 const VENUES = path.join(SEED_DIR, "venues.json");
+const EXHIBITIONS = path.join(SEED_DIR, "exhibitions.json");
 
 /** Every *-catalogue.ndjson.gz in data/seed, so a second source just drops in. */
 function catalogueFiles() {
@@ -218,6 +220,17 @@ async function main() {
       console.log(
         `conflicted ${duplicates.flagged} works across ${duplicates.qids.length} ` +
           `duplicated Q-numbers (${duplicates.qids.join(", ")}) → /internal/reconciliation`,
+      );
+    }
+
+    // Real exhibitions, from the museum's public listing (see the loader for
+    // why this is a checked-in file rather than a scraper).
+    if (existsSync(EXHIBITIONS)) {
+      const shows = loadExhibitions(db, JSON.parse(readFileSync(EXHIBITIONS, "utf8")));
+      console.log(
+        `exhibitions +${shows.inserted} (updated ${shows.updated}` +
+          (shows.skipped.length ? `, skipped ${shows.skipped.length}` : "") +
+          `)`,
       );
     }
   } else if (command === "demo") {

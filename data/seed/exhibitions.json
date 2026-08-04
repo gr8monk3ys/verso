@@ -1,0 +1,385 @@
+{
+  "source": "https://www.metmuseum.org/exhibitions",
+  "fetched_at": "2026-08-03",
+  "note": "Extracted from the museum's public exhibitions listing in a browser; the raw date line is kept in as_listed so a parse can be re-checked. Year-less dates resolve to their next occurrence from fetched_at.",
+  "exhibitions": [
+    {
+      "slug": "musical-bodies",
+      "title": "Musical Bodies",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2026-09-27",
+      "as_listed": "Through September 27",
+      "url": "https://www.metmuseum.org/exhibitions/musical-bodies"
+    },
+    {
+      "slug": "costume-art",
+      "title": "Costume Art",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-01-10",
+      "as_listed": "Through January 10, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/costume-art"
+    },
+    {
+      "slug": "giacometti-in-the-temple-of-dendur",
+      "title": "Giacometti in the Temple of Dendur",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2026-09-08",
+      "as_listed": "Through September 8",
+      "url": "https://www.metmuseum.org/exhibitions/giacometti-in-the-temple-of-dendur"
+    },
+    {
+      "slug": "orientalism-between-fact-and-fantasy",
+      "title": "Orientalism: Between Fact and Fantasy",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-02-28",
+      "as_listed": "Through February 28, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/orientalism-between-fact-and-fantasy"
+    },
+    {
+      "slug": "creatures-of-myth-and-imagination-europe-and-the-americas",
+      "title": "Creatures of Myth and Imagination: Europe and the Americas",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2026-10-18",
+      "as_listed": "Through October 18",
+      "url": "https://www.metmuseum.org/exhibitions/creatures-of-myth-and-imagination-europe-and-the-americas"
+    },
+    {
+      "slug": "the-face-of-life-modern-portraits-at-the-met",
+      "title": "The Face of Life: Modern Portraits at The Met",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/the-face-of-life-modern-portraits-at-the-met"
+    },
+    {
+      "slug": "cottage-industry-the-val-kill-furniture-shop",
+      "title": "Cottage Industry: The Val-Kill Furniture Shop",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-05-09",
+      "as_listed": "Through May 9, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/cottage-industry-the-val-kill-furniture-shop"
+    },
+    {
+      "slug": "city-of-memory-nanjing-in-the-17th-century",
+      "title": "City of Memory: Nanjing in the Seventeenth Century",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-01-03",
+      "as_listed": "Through January 3, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/city-of-memory-nanjing-in-the-17th-century"
+    },
+    {
+      "slug": "p-s-art-2026-celebrating-the-creative-spirit-of-new-york-city-kids",
+      "title": "P. S. Art 2026: Celebrating the Creative Spirit of New York City Kids",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2026-10-26",
+      "as_listed": "Through October 26",
+      "url": "https://www.metmuseum.org/exhibitions/p-s-art-2026-celebrating-the-creative-spirit-of-new-york-city-kids"
+    },
+    {
+      "slug": "independence-and-identity-selections-from-the-department-of-drawings-and-prints",
+      "title": "Independence and Identity: Selections from the Department of Drawings and Prints",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2026-09-29",
+      "as_listed": "Through September 29",
+      "url": "https://www.metmuseum.org/exhibitions/independence-and-identity-selections-from-the-department-of-drawings-and-prints"
+    },
+    {
+      "slug": "flip-sides-seeing-korean-art-anew",
+      "title": "Flip Sides: Seeing Korean Art Anew",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-05-31",
+      "as_listed": "Through May 31, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/flip-sides-seeing-korean-art-anew"
+    },
+    {
+      "slug": "celebrating-the-year-of-the-horse",
+      "title": "Celebrating the Year of the Horse",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-01-26",
+      "as_listed": "Through January 26, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/celebrating-the-year-of-the-horse"
+    },
+    {
+      "slug": "household-gods-hindu-devotional-prints-1860-1930",
+      "title": "Household Gods: Hindu Devotional Prints, 1860–1930",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-01-24",
+      "ends_on": "2027-06-27",
+      "as_listed": "January 24, 2026–June 27, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/household-gods-hindu-devotional-prints-1860-1930"
+    },
+    {
+      "slug": "revolution",
+      "title": "Revolution!",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2026-09-07",
+      "as_listed": "Through September 7",
+      "url": "https://www.metmuseum.org/exhibitions/revolution"
+    },
+    {
+      "slug": "the-infinite-artistry-of-japanese-ceramics",
+      "title": "The Infinite Artistry of Japanese Ceramics",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-08-08",
+      "as_listed": "Through August 8, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/the-infinite-artistry-of-japanese-ceramics"
+    },
+    {
+      "slug": "afterlives-contemporary-art-in-the-byzantine-crypt",
+      "title": "Afterlives: Contemporary Art in the Byzantine Crypt",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": "2027-01-10",
+      "as_listed": "Through January 10, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/afterlives-contemporary-art-in-the-byzantine-crypt"
+    },
+    {
+      "slug": "decorative-arts-in-china-1000-to-the-present",
+      "title": "Decorative Arts in China, 1000 to the Present",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-07-25",
+      "ends_on": null,
+      "as_listed": "July 25, 2026–Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/decorative-arts-in-china-1000-to-the-present"
+    },
+    {
+      "slug": "a-lasting-legacy-chinese-jades-from-new-york-collections",
+      "title": "A Lasting Legacy: Chinese Jades from New York Collections",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/a-lasting-legacy-chinese-jades-from-new-york-collections"
+    },
+    {
+      "slug": "wedding-attire-three-cultures-one-celebration",
+      "title": "Wedding Attire: Three Cultures, One Celebration",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/wedding-attire-three-cultures-one-celebration"
+    },
+    {
+      "slug": "arts-of-oceania",
+      "title": "Arts of Oceania",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/arts-of-oceania"
+    },
+    {
+      "slug": "arts-of-the-ancient-americas",
+      "title": "Arts of the Ancient Americas",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/arts-of-the-ancient-americas"
+    },
+    {
+      "slug": "arts-of-africa",
+      "title": "Arts of Africa",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/arts-of-africa"
+    },
+    {
+      "slug": "defensive-display-shields-from-the-met-collection",
+      "title": "Defensive Display: Shields from The Met Collection",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/defensive-display-shields-from-the-met-collection"
+    },
+    {
+      "slug": "the-american-wing-at-100",
+      "title": "The American Wing at 100",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/the-american-wing-at-100"
+    },
+    {
+      "slug": "the-calculated-curve-eighteenth-century-american-furniture",
+      "title": "The Calculated Curve: Eighteenth-Century American Furniture",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/the-calculated-curve-eighteenth-century-american-furniture"
+    },
+    {
+      "slug": "cycladic-art",
+      "title": "Cycladic Art",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/cycladic-art"
+    },
+    {
+      "slug": "look-again-european-paintings-1300-1800",
+      "title": "Look Again: European Paintings 1300–1800",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/look-again-european-paintings-1300-1800"
+    },
+    {
+      "slug": "layered-narratives-the-northern-renaissance-gallery",
+      "title": "Layered Narratives: The Northern Renaissance Gallery",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/layered-narratives-the-northern-renaissance-gallery"
+    },
+    {
+      "slug": "art-of-native-america-diker-collection",
+      "title": "Art of Native America: The Charles and Valerie Diker Collection",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/art-of-native-america-diker-collection"
+    },
+    {
+      "slug": "renaissance-masterpieces",
+      "title": "Renaissance Masterpieces of Judaica: The Mishneh Torah and The Rothschild Mahzor",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/renaissance-masterpieces"
+    },
+    {
+      "slug": "michael-lin-pentachrome",
+      "title": "Michael Lin: Pentachrome",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/michael-lin-pentachrome"
+    },
+    {
+      "slug": "afrofuturist-period-room",
+      "title": "Before Yesterday We Could Fly: An Afrofuturist Period Room",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/afrofuturist-period-room"
+    },
+    {
+      "slug": "british-galleries",
+      "title": "The British Galleries",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/british-galleries"
+    },
+    {
+      "slug": "faberge",
+      "title": "Fabergé from the Matilda Geddings Gray Foundation Collection",
+      "venue": "met-fifth-avenue",
+      "starts_on": null,
+      "ends_on": null,
+      "as_listed": "Ongoing",
+      "url": "https://www.metmuseum.org/exhibitions/faberge"
+    },
+    {
+      "slug": "rediscovering-della-robbia-at-the-met",
+      "title": "Rediscovering Della Robbia at The Met",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-08-10",
+      "ends_on": "2028-01-17",
+      "as_listed": "August 10, 2026–January 17, 2028",
+      "url": "https://www.metmuseum.org/exhibitions/rediscovering-della-robbia-at-the-met"
+    },
+    {
+      "slug": "a-kings-carpet-louis-xiv-and-the-savonnerie",
+      "title": "A King’s Carpet: Louis XIV and the Savonnerie",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-09-08",
+      "ends_on": "2028-03-05",
+      "as_listed": "September 8, 2026–March 5, 2028",
+      "url": "https://www.metmuseum.org/exhibitions/a-kings-carpet-louis-xiv-and-the-savonnerie"
+    },
+    {
+      "slug": "the-genesis-facade-commission-liu-wei",
+      "title": "The Genesis Facade Commission: Liu Wei, Speculation",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-09-17",
+      "ends_on": "2027-06-08",
+      "as_listed": "September 17, 2026–June 8, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/the-genesis-facade-commission-liu-wei"
+    },
+    {
+      "slug": "david-hartt-peripheries",
+      "title": "David Hartt: Peripheries",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-09-25",
+      "ends_on": "2027-02-07",
+      "as_listed": "September 25, 2026–February 7, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/david-hartt-peripheries"
+    },
+    {
+      "slug": "there-are-no-words-si-lewens-parade",
+      "title": "There Are No Words: Si Lewen's Parade",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-10-01",
+      "ends_on": "2027-01-05",
+      "as_listed": "October 1, 2026–January 5, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/there-are-no-words-si-lewens-parade"
+    },
+    {
+      "slug": "krasner-and-pollock-past-continuous",
+      "title": "Krasner and Pollock: Past Continuous",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-10-04",
+      "ends_on": "2027-01-31",
+      "as_listed": "October 4, 2026–January 31, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/krasner-and-pollock-past-continuous"
+    },
+    {
+      "slug": "designing-the-gilded-age-drawings-from-the-studios-of-louis-c-tiffany",
+      "title": "Designing the Gilded Age: Drawings from the Studios of Louis C. Tiffany",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-10-22",
+      "ends_on": "2027-02-07",
+      "as_listed": "October 22, 2026–February 7, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/designing-the-gilded-age-drawings-from-the-studios-of-louis-c-tiffany"
+    },
+    {
+      "slug": "across-wine-dark-seas-art-and-identity-beyond-ancient-greece",
+      "title": "Across Wine-Dark Seas: Art and Identity beyond Ancient Greece",
+      "venue": "met-fifth-avenue",
+      "starts_on": "2026-12-20",
+      "ends_on": "2027-04-11",
+      "as_listed": "December 20, 2026–April 11, 2027",
+      "url": "https://www.metmuseum.org/exhibitions/across-wine-dark-seas-art-and-identity-beyond-ancient-greece"
+    }
+  ]
+}

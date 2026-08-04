@@ -280,63 +280,23 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     }
 
     // ------------------------------------------------------- exhibitions --
-    const metId = venues.find((v) => v.slug === "met-fifth-avenue")?.id ?? venues[0].id;
-    const cloistersId = venues.find((v) => v.slug === "met-cloisters")?.id ?? metId;
-    const exhibitionSpecs = [
-      {
-        slug: "hands-of-the-sculptor",
-        venue_id: metId,
-        title: "Hands of the Sculptor",
-        subtitle: "Modelling and the unfinished",
-        starts: -150,
-        ends: 30,
-        size: 26,
-      },
-      {
-        slug: "winter-light-cloisters",
-        venue_id: cloistersId,
-        title: "Winter Light",
-        subtitle: "Glass and the medieval interior",
-        starts: -90,
-        ends: 45,
-        size: 18,
-      },
-    ];
-    const insertExhibition = db.prepare(
-      `INSERT INTO exhibitions (slug, venue_id, title, subtitle, description, starts_on, ends_on)
-       VALUES (?,?,?,?,?,?,?)
-       ON CONFLICT(slug) DO NOTHING`,
-    );
-    const insertInclusion = db.prepare(
-      "INSERT OR IGNORE INTO inclusions (exhibition_id, work_id, position) VALUES (?,?,?)",
-    );
+    // Exhibitions are no longer fabricated here — data/seed/exhibitions.json
+    // carries the museum's real listings and scripts/db.mjs seed loads them.
+    // The demo's job is only to attach some sightings to the ones that were
+    // open on the day being simulated, the way a visitor would log a work seen
+    // inside a show. Which works were in which show is unknowable from here —
+    // the museum publishes no object list — so a sighting claims only "seen
+    // at", and the exhibition page builds its object list from those claims.
+    // A null starts_on is the museum's "Through …" or "Ongoing" — no published
+    // opening date, but listed as open. Filtering those out concentrated 97% of
+    // exhibition sightings on the one show that happened to publish its dates.
+    const openExhibitions = db
+      .prepare("SELECT id, venue_id, starts_on, ends_on FROM exhibitions ORDER BY id")
+      .all();
     const exhibitionsByVenue = new Map();
-    for (const spec of exhibitionSpecs) {
-      const startsOn = new Date(today);
-      startsOn.setUTCDate(startsOn.getUTCDate() + spec.starts);
-      const endsOn = new Date(today);
-      endsOn.setUTCDate(endsOn.getUTCDate() + spec.ends);
-      insertExhibition.run(
-        spec.slug, spec.venue_id, spec.title, spec.subtitle,
-        "A demo exhibition: works drawn from the permanent collection so the " +
-          "exhibition surface has something to show before real listings exist.",
-        isoDate(startsOn), isoDate(endsOn),
-      );
-      const exhibition = db.prepare("SELECT id FROM exhibitions WHERE slug = ?").get(spec.slug);
-      const pool = db
-        .prepare(
-          `SELECT w.id FROM works w
-             JOIN displays d ON d.work_id = w.id AND d.ended_on IS NULL
-            WHERE d.venue_id = ? ORDER BY w.id LIMIT ?`,
-        )
-        .all(spec.venue_id, spec.size);
-      pool.forEach((work, index) => insertInclusion.run(exhibition.id, work.id, index));
-      exhibitionsByVenue.set(spec.venue_id, {
-        id: exhibition.id,
-        works: new Set(pool.map((w) => w.id)),
-        startsOn: isoDate(startsOn),
-      });
-      summary.exhibitions++;
+    for (const show of openExhibitions) {
+      if (!exhibitionsByVenue.has(show.venue_id)) exhibitionsByVenue.set(show.venue_id, []);
+      exhibitionsByVenue.get(show.venue_id).push(show);
     }
 
     // ---------------------------------------------------------- sightings --
@@ -400,11 +360,16 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
                 .filter(Boolean)
                 .join(" ")
             : null;
-          const exhibition = exhibitionsByVenue.get(venueId);
+          // Roughly one visit in five wanders into a show that was open that
+          // day. The sighting is attached to it, which is all it takes — the
+          // exhibition page derives its community object list from sightings.
+          const openThatDay = (exhibitionsByVenue.get(venueId) ?? []).filter(
+            (show) =>
+              (show.starts_on == null || show.starts_on <= seenOn) &&
+              (show.ends_on == null || show.ends_on >= seenOn),
+          );
           const exhibitionId =
-            exhibition && exhibition.works.has(workId) && seenOn >= exhibition.startsOn
-              ? exhibition.id
-              : null;
+            openThatDay.length && random() < 0.2 ? pick(random, openThatDay).id : null;
           const capture = random() < 0.7;
 
           const result = insertSighting.run(
@@ -576,6 +541,14 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
         summary.favourites++;
       });
     }
+
+    // Shows that actually received sightings — the count that describes what
+    // the demo did, not what the seed loaded.
+    summary.exhibitions = db
+      .prepare(
+        "SELECT COUNT(DISTINCT exhibition_id) AS n FROM sightings WHERE exhibition_id IS NOT NULL",
+      )
+      .get().n;
   });
 
   return summary;

@@ -86,23 +86,76 @@ export function exhibitionsAt(venueId: number) {
   );
 }
 
-export function currentExhibitions(limit = 10) {
-  return all<{
-    id: number;
-    slug: string;
-    title: string;
-    subtitle: string;
-    starts_on: string | null;
-    ends_on: string | null;
-    venue_name: string;
-    venue_slug: string;
-    work_count: number;
-  }>(
-    `SELECT e.*, v.name AS venue_name, v.slug AS venue_slug,
-            (SELECT COUNT(*) FROM inclusions i WHERE i.exhibition_id = e.id) AS work_count
+export type ExhibitionRow = {
+  id: number;
+  slug: string;
+  title: string;
+  subtitle: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  venue_name: string;
+  venue_slug: string;
+  work_count: number;
+};
+
+const EXHIBITION_COLUMNS = `
+  e.*, v.name AS venue_name, v.slug AS venue_slug,
+  (SELECT COUNT(DISTINCT work_id) FROM
+     (SELECT work_id FROM inclusions i WHERE i.exhibition_id = e.id
+      UNION SELECT work_id FROM sightings s
+       WHERE s.exhibition_id = e.id AND s.is_private = 0)) AS work_count
+`;
+
+/**
+ * Open today: started (or has no start, the museum's "Ongoing"), not yet ended.
+ * Dated runs first, closing soonest — "see it before it goes" is the useful
+ * ordering — and the permanent ongoing installations after.
+ */
+export function currentExhibitions(limit = 10): ExhibitionRow[] {
+  return all<ExhibitionRow>(
+    `SELECT ${EXHIBITION_COLUMNS}
        FROM exhibitions e JOIN venues v ON v.id = e.venue_id
-      WHERE (e.ends_on IS NULL OR e.ends_on >= date('now'))
-      ORDER BY e.ends_on LIMIT ?`,
+      WHERE (e.starts_on IS NULL OR e.starts_on <= date('now'))
+        AND (e.ends_on IS NULL OR e.ends_on >= date('now'))
+      ORDER BY e.ends_on IS NULL, e.ends_on, e.title LIMIT ?`,
+    limit,
+  );
+}
+
+/**
+ * Shows open today at one venue — the choices the log form can honestly offer.
+ * Only currently-open shows: a sighting logged today cannot have happened at a
+ * show that has closed or not yet opened.
+ */
+export function openExhibitionsAt(venueId: number): { id: number; title: string }[] {
+  return all<{ id: number; title: string }>(
+    `SELECT e.id, e.title FROM exhibitions e
+      WHERE e.venue_id = ?
+        AND (e.starts_on IS NULL OR e.starts_on <= date('now'))
+        AND (e.ends_on IS NULL OR e.ends_on >= date('now'))
+      ORDER BY e.starts_on IS NULL, e.starts_on DESC, e.title`,
+    venueId,
+  );
+}
+
+/** Announced but not yet open, soonest first. */
+export function upcomingExhibitions(limit = 10): ExhibitionRow[] {
+  return all<ExhibitionRow>(
+    `SELECT ${EXHIBITION_COLUMNS}
+       FROM exhibitions e JOIN venues v ON v.id = e.venue_id
+      WHERE e.starts_on IS NOT NULL AND e.starts_on > date('now')
+      ORDER BY e.starts_on, e.title LIMIT ?`,
+    limit,
+  );
+}
+
+/** Ended, most recently closed first — the archive of shows people logged. */
+export function pastExhibitions(limit = 30): ExhibitionRow[] {
+  return all<ExhibitionRow>(
+    `SELECT ${EXHIBITION_COLUMNS}
+       FROM exhibitions e JOIN venues v ON v.id = e.venue_id
+      WHERE e.ends_on IS NOT NULL AND e.ends_on < date('now')
+      ORDER BY e.ends_on DESC, e.title LIMIT ?`,
     limit,
   );
 }
@@ -129,6 +182,16 @@ export function exhibitionBySlug(slug: string) {
   );
 }
 
+/**
+ * The works in a show: the curated list, plus the community-built one.
+ *
+ * Museums do not publish machine-readable object lists, so `inclusions` is
+ * usually empty for a real exhibition — what exists instead is people logging
+ * works *at* the show. Both count. A curated inclusion keeps its position; a
+ * work known only from public sightings joins after, most-logged first. This is
+ * the same bet the display table makes (§10.3): where the institution is
+ * silent, the visitors are the record.
+ */
 export function exhibitionWorks(exhibitionId: number) {
   return all<{
     id: number;
@@ -139,13 +202,23 @@ export function exhibitionWorks(exhibitionId: number) {
     image_url: string | null;
     avg_rating: number | null;
     sighting_count: number;
+    curated: number;
   }>(
     `SELECT w.id, w.slug, w.title, w.artist_display, w.date_display, w.image_url,
-            (SELECT AVG(rating) / 2.0 FROM sightings s WHERE s.work_id = w.id) AS avg_rating,
-            (SELECT COUNT(*) FROM sightings s WHERE s.work_id = w.id AND s.exhibition_id = ?) AS sighting_count
-       FROM inclusions i JOIN works w ON w.id = i.work_id
-      WHERE i.exhibition_id = ?
-      ORDER BY i.position, w.id`,
+            (SELECT AVG(rating) / 2.0 FROM sightings s
+              WHERE s.work_id = w.id AND s.rating IS NOT NULL AND s.is_private = 0) AS avg_rating,
+            (SELECT COUNT(*) FROM sightings s
+              WHERE s.work_id = w.id AND s.exhibition_id = ? AND s.is_private = 0) AS sighting_count,
+            MAX(source.curated) AS curated,
+            MIN(source.position) AS position
+       FROM (SELECT work_id, position, 1 AS curated FROM inclusions WHERE exhibition_id = ?
+             UNION ALL
+             SELECT DISTINCT work_id, NULL, 0 FROM sightings
+              WHERE exhibition_id = ? AND is_private = 0) source
+       JOIN works w ON w.id = source.work_id
+      GROUP BY w.id
+      ORDER BY curated DESC, position, sighting_count DESC, w.id`,
+    exhibitionId,
     exhibitionId,
     exhibitionId,
   );
