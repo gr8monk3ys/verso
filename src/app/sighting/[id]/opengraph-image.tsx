@@ -1,4 +1,4 @@
-import { sightingById } from "@/lib/domain/sightings";
+import { sightingById, sightingVisibility } from "@/lib/domain/sightings";
 import { displayArtist, displayTitle, formatSeenOn } from "@/lib/format";
 import { OG_CONTENT_TYPE, OG_SIZE, ogCard } from "@/lib/og";
 
@@ -9,7 +9,10 @@ export const alt = "A sighting on Verso";
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const sighting = sightingById(Number(id));
-  if (!sighting || sighting.is_private) return ogCard({ title: "Verso" });
+  const access = sightingVisibility(Number(id));
+  // OG scrapers are anonymous, so anything private — the sighting's own flag
+  // or its owner's account — renders the generic card, same as the page 404s.
+  if (!sighting || !access || access.isPrivate) return ogCard({ title: "Verso" });
 
   return ogCard({
     eyebrow: `@${sighting.handle} · ${formatSeenOn(sighting.seen_on, sighting.date_precision)}`,

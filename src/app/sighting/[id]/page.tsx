@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { currentUser } from "@/lib/auth/session";
-import { sightingById } from "@/lib/domain/sightings";
+import { sightingById, sightingVisibility } from "@/lib/domain/sightings";
 import { commentsFor, likedByUser } from "@/lib/domain/social";
 import { isBlockedEitherWay, REPORT_REASONS } from "@/lib/domain/moderation.mjs";
 import { db } from "@/lib/db";
@@ -29,7 +29,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const sighting = sightingById(Number(id));
-  if (!sighting) return { title: "Not found — Verso" };
+  const access = sightingVisibility(Number(id));
+  if (!sighting || !access) return { title: "Not found — Verso" };
+  // Metadata must gate exactly like the page: a private sighting's review has
+  // no business in a <meta> tag either.
+  if (access.isPrivate) {
+    const viewer = await currentUser();
+    if (viewer?.id !== access.ownerId) return { title: "Not found — Verso" };
+  }
 
   const title = `${sighting.display_name} on ${displayTitle(sighting.work_title)}`;
   const description = sighting.review
@@ -62,13 +69,16 @@ export default async function SightingPage({
   const { id } = await params;
   const { reported } = await searchParams;
   const sighting = sightingById(Number(id));
-  if (!sighting) notFound();
+  const access = sightingVisibility(Number(id));
+  if (!sighting || !access) notFound();
 
   const viewer = await currentUser();
   const isOwner = viewer?.id === sighting.user_id;
 
-  // Private sightings belong to one person; blocked users see nothing.
-  if (sighting.is_private && !isOwner) notFound();
+  // Private sightings belong to one person, and a sighting on a private
+  // account is private however it is flagged — the same rule the photograph
+  // route enforces. Blocked users see nothing.
+  if (access.isPrivate && !isOwner) notFound();
   if (viewer && !isOwner && isBlockedEitherWay(db(), viewer.id, sighting.user_id)) notFound();
 
   const comments = commentsFor(sighting.id);
