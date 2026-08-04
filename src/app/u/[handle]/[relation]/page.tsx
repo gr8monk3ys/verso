@@ -19,6 +19,12 @@ export default async function RelationPage({
   if (!profile) notFound();
 
   const viewer = await currentUser();
+  // The profile page shows a private diary as a closed door; the follow graph
+  // is part of what is behind it. Without this, /followers stayed readable one
+  // URL below the wall — who a person watches is not less sensitive than what
+  // they log.
+  if (profile.is_private && viewer?.id !== profile.id) notFound();
+
   const people = relation === "followers" ? followers(profile.id) : following(profile.id);
 
   return (

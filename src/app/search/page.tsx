@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { all } from "@/lib/db";
-import { searchWorks, type WorkCard } from "@/lib/domain/works";
+import { searchWorks, worksByTag, type WorkCard } from "@/lib/domain/works";
 import { activeVenues } from "@/lib/domain/venues";
 import { searchArtists } from "@/lib/domain/artists";
 import { Plate } from "@/components/Plate";
@@ -23,19 +22,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
 
   const artists = query.trim().length >= 2 ? searchArtists(query) : [];
   const results: WorkCard[] = tag
-    ? all<WorkCard>(
-        `SELECT w.*, v.name AS venue_name, v.slug AS venue_slug, d.location_label,
-                (SELECT AVG(rating) / 2.0 FROM sightings s WHERE s.work_id = w.id) AS avg_rating,
-                (SELECT COUNT(*) FROM sightings s WHERE s.work_id = w.id) AS sighting_count
-           FROM works w
-           LEFT JOIN displays d ON d.work_id = w.id AND d.ended_on IS NULL
-           LEFT JOIN venues v ON v.id = COALESCE(d.venue_id, w.home_venue_id)
-          WHERE w.id IN (
-            SELECT s.work_id FROM sighting_tags t JOIN sightings s ON s.id = t.sighting_id
-             WHERE t.tag = ?)
-          ORDER BY sighting_count DESC LIMIT 60`,
-        tag,
-      )
+    ? worksByTag(tag)
     : searchWorks(query, { limit: 60, venueId: venue?.id ?? null, onViewOnly: onView });
 
   return (

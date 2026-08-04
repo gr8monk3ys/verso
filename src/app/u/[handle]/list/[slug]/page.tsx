@@ -23,7 +23,9 @@ export default async function ListPage({
 
   const viewer = await currentUser();
   const isSelf = viewer?.id === profile.id;
-  if (!list.is_public && !isSelf) notFound();
+  // Two gates, and the account one comes first: a public list on a private
+  // account is still behind the account.
+  if ((profile.is_private || !list.is_public) && !isSelf) notFound();
 
   const items = listItems(list.id);
   const path = `/u/${handle}/list/${slug}`;

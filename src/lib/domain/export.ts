@@ -97,6 +97,13 @@ export function exportJson(userId: number, handle: string): string {
     userId,
   );
 
+  const favourites = all<{ title: string; artist_display: string; slug: string; wikidata_qid: string | null; position: number }>(
+    `SELECT w.title, w.artist_display, w.slug, w.wikidata_qid, f.position
+       FROM favourites f JOIN works w ON w.id = f.work_id
+      WHERE f.user_id = ? ORDER BY f.position`,
+    userId,
+  );
+
   return JSON.stringify(
     {
       format: "verso-export/1",
@@ -106,10 +113,12 @@ export function exportJson(userId: number, handle: string): string {
         sightings: sightings.length,
         lists: lists.length,
         watchlist: watchlist.length,
+        favourites: favourites.length,
       },
       sightings,
       lists,
       watchlist,
+      favourites,
     },
     null,
     2,

@@ -28,13 +28,19 @@ export type FavouriteWork = {
  * A profile's top four, in position order.
  *
  * The rating is the owner's own, not the crowd's: on somebody's profile the
- * number that belongs next to their choice is what *they* gave it.
+ * number that belongs next to their choice is what *they* gave it. But only
+ * from sightings the viewer is allowed to see — favouriting a work publicly
+ * does not un-private the rating on a private log of it, so for anyone but the
+ * owner the rating comes from public sightings alone. Same split as
+ * worksSeenByUser.
  */
-export function favouritesForUser(userId: number): FavouriteWork[] {
+export function favouritesForUser(userId: number, viewerId: number | null = null): FavouriteWork[] {
+  const privacy = viewerId === userId ? "" : "AND s.is_private = 0";
   return all<FavouriteWork>(
     `SELECT f.work_id, f.position, w.slug, w.title, w.artist_display, w.image_url,
             (SELECT s.rating FROM sightings s
-              WHERE s.user_id = f.user_id AND s.work_id = f.work_id AND s.rating IS NOT NULL
+              WHERE s.user_id = f.user_id AND s.work_id = f.work_id
+                AND s.rating IS NOT NULL ${privacy}
               ORDER BY s.seen_on DESC LIMIT 1) AS rating
        FROM favourites f JOIN works w ON w.id = f.work_id
       WHERE f.user_id = ?

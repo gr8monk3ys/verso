@@ -38,13 +38,19 @@ export type WorkCard = Work & {
   sighting_count: number;
 };
 
+// The aggregates exclude private sightings, matching ratingSummary below. They
+// used to count everything, which meant a rating logged in a private diary fed
+// the stars on every search card, the catalogue API and the popular chart's
+// ordering — and the search card could disagree with the work page it linked to,
+// because the page's own summary was already filtering.
 const CARD_COLUMNS = `
   w.*,
   v.name AS venue_name,
   v.slug AS venue_slug,
   d.location_label AS location_label,
-  (SELECT AVG(rating) / 2.0 FROM sightings s WHERE s.work_id = w.id AND s.rating IS NOT NULL) AS avg_rating,
-  (SELECT COUNT(*) FROM sightings s WHERE s.work_id = w.id) AS sighting_count
+  (SELECT AVG(rating) / 2.0 FROM sightings s
+    WHERE s.work_id = w.id AND s.rating IS NOT NULL AND s.is_private = 0) AS avg_rating,
+  (SELECT COUNT(*) FROM sightings s WHERE s.work_id = w.id AND s.is_private = 0) AS sighting_count
 `;
 
 const CARD_JOINS = `
@@ -133,6 +139,29 @@ export function searchWorks(query: string, options: SearchOptions = {}): WorkCar
     ...params,
     limit,
     offset,
+  );
+}
+
+/**
+ * Works carrying a tag, most-logged first.
+ *
+ * Only public sightings qualify a work for the tag page. Tagging is part of a
+ * sighting, and a sighting marked private is private in its entirety — before
+ * this lived here, the search page's inline query would list a work under
+ * "wow" when the only person who tagged it had logged it privately, quietly
+ * publishing an edited fragment of a private entry.
+ */
+export function worksByTag(tag: string, limit = 60): WorkCard[] {
+  return all<WorkCard>(
+    `SELECT ${CARD_COLUMNS} ${CARD_JOINS}
+      WHERE w.id IN (
+        SELECT s.work_id FROM sighting_tags t
+          JOIN sightings s ON s.id = t.sighting_id
+         WHERE t.tag = ? AND s.is_private = 0)
+      ORDER BY sighting_count DESC, w.id
+      LIMIT ?`,
+    tag,
+    limit,
   );
 }
 

@@ -50,7 +50,7 @@ export default async function ProfilePage({
   const years = loggedYears(profile.id);
   const path = `/u/${profile.handle}`;
   const blocked = viewer ? isBlockedEitherWay(db(), viewer.id, profile.id) : false;
-  const favourites = favouritesForUser(profile.id);
+  const favourites = favouritesForUser(profile.id, viewerId);
 
   return (
     <div className="pb-10">
