@@ -80,9 +80,8 @@ const CARD_SELECT = `
  * display inference and watchlist notification — lives in sighting-store.mjs
  * so the test suite can exercise it directly against an in-memory database.
  */
-/** Null when clientUuid belongs to another account — see store.createSighting. */
-export function createSighting(input: SightingInput): Sighting | null {
-  return transact(() => store.createSighting(db(), input) as Sighting | null);
+export function createSighting(input: SightingInput): Sighting {
+  return transact(() => store.createSighting(db(), input) as Sighting);
 }
 
 export function setTags(sightingId: number, tags: string[]) {

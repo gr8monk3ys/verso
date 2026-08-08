@@ -26,7 +26,14 @@ import {
   toggleLike,
   unfollow,
 } from "@/lib/domain/social";
-import { addToList, createList, deleteList, removeFromList, toggleWatch } from "@/lib/domain/lists";
+import {
+  addToList,
+  createList,
+  deleteList,
+  moveListItem,
+  removeFromList,
+  toggleWatch,
+} from "@/lib/domain/lists";
 import { addFavouriteWork, removeFavouriteWork } from "@/lib/domain/favourites";
 import { recordRecognition } from "@/lib/recognition";
 import { get } from "@/lib/db";
@@ -95,13 +102,7 @@ export async function logSightingAction(formData: FormData) {
     redirect(`/search?error=${encodeURIComponent(input.error)}`);
   }
 
-  if (!createSighting({ ...input, userId: user.id })) {
-    // client_uuid arrives on the form too, so this path needs the same refusal
-    // as the sync endpoint — and it has to say so rather than drop the log.
-    redirect(
-      `/search?error=${encodeURIComponent("That capture couldn't be saved. Try logging it again.")}`,
-    );
-  }
+  createSighting({ ...input, userId: user.id });
 
   // Recognition telemetry, when the capture screen supplied it (§13 guardrail).
   const rank = formData.get("recognition_rank");
@@ -255,19 +256,32 @@ export async function createListAction(formData: FormData) {
     isRanked: formData.get("is_ranked") === "on",
   });
   const workId = Number(formData.get("work_id"));
-  if (workId) addToList(list.id, workId);
+  if (workId) addToList(list.id, user.id, workId);
   redirect(`/u/${user.handle}/list/${list.slug}`);
 }
 
 export async function addToListAction(formData: FormData) {
-  await actor();
-  addToList(Number(formData.get("list_id")), Number(formData.get("work_id")));
+  const user = await actor();
+  addToList(Number(formData.get("list_id")), user.id, Number(formData.get("work_id")));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
 export async function removeFromListAction(formData: FormData) {
-  await actor();
-  removeFromList(Number(formData.get("list_id")), Number(formData.get("item_id")));
+  const user = await actor();
+  removeFromList(Number(formData.get("list_id")), user.id, Number(formData.get("item_id")));
+  revalidatePath(String(formData.get("next") ?? "/"));
+}
+
+/** Swap a list item with its neighbour — the whole reorder UI is two arrows. */
+export async function moveListItemAction(formData: FormData) {
+  const user = await actor();
+  const direction = formData.get("direction") === "up" ? "up" : "down";
+  moveListItem(
+    Number(formData.get("list_id")),
+    user.id,
+    Number(formData.get("item_id")),
+    direction,
+  );
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 

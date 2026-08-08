@@ -58,6 +58,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="display tracking-[0.25em]">VERSO</span>
             <a href="/search">Catalogue</a>
+            <a href="/artists">Artists</a>
             <a href="/lists">Lists</a>
             <a href="/exhibitions">Exhibitions</a>
             <a href="/terms">Terms</a>

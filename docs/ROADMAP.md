@@ -21,27 +21,13 @@ culture, department, dimensions, date — not a looser artist gate, which would 
 coverage with silent wrong merges. Measure any change with
 `npm run eval:catalogue`, which grades against the museum's own Q-numbers.
 
-### `client_uuid` should be unique per user, not globally
-The offline queue mints `client_uuid` on the device, so it arrives as untrusted
-input. `createSighting` now refuses a uuid already owned by another account, which
-closes the hole, but the column is still declared `TEXT UNIQUE` — a global
-constraint for a value that is only ever meaningful per user. The honest schema is
-`UNIQUE(user_id, client_uuid)`.
-
-That is a table rebuild: the constraint is inline, so its implicit index cannot be
-dropped, and `migrate.mjs` is deliberately additive-only. It needs a real
-migration written by hand, not an entry in `ADDED_COLUMNS`.
-
-### Continuous integration that actually runs
-`.github/workflows/ci.yml` is `workflow_dispatch`-only because Actions cannot
-start a runner here — two runs on PR #1 failed in ~4 seconds having executed no
-step, which is the exhausted-minutes signature on a private repo sharing the
-free-plan pool. The job itself has never been the problem.
-
-Public repositories get unlimited Actions. This one is GPL-3.0 with a CC0
-catalogue and no secrets, so making it public re-enables CI for free: uncomment
-the `pull_request` trigger, change nothing else. Until then `npm run verify` is
-the gate and it only runs when somebody remembers.
+### CI depends on a metered minute pool
+`ci.yml` runs on every PR and push to main, and `check` is a required status —
+but this is a private repository on the free plan, so every run spends from a
+shared ~2000 minutes/month. When the pool empties, runs fail in seconds having
+executed nothing, which reads as a red X and is actually a billing state. The
+durable fix is making the repository public (GPL-3.0, CC0 catalogue, no
+secrets), which lifts the cap entirely.
 
 ### Native apps for iOS and Android
 Verso is an installable PWA today — home-screen icon, standalone window,
@@ -99,11 +85,13 @@ the room you are in. The `http` provider is the seam. The guardrail already
 measures whether a model is needed — a high rate of "searched instead" would
 say the prior isn't good enough.
 
-### Exhibition listings
-Exhibition pages work; the exhibitions in them are demo data. Real listings mean
-either institutional feeds, a scraper per venue, or user submission. The PRD is
-right that listings are a content treadmill, which is why this is here and not
-in the launch set.
+### Exhibition listings, past the first venue
+The Met's 42 current listings are real — extracted from the museum's public
+exhibitions page in a browser and checked in with their raw date lines
+(`data/seed/exhibitions.json`). What does not exist is a *refresh cadence*
+(the file is a snapshot; re-extraction is deliberate and manual) or a second
+venue's listings. The PRD is right that listings are a content treadmill;
+one venue's snapshot is the honest first step, not the system.
 
 ### More venues, more cities
 Two venues, one city, because that is where open on-view data exists. Each new
@@ -131,7 +119,6 @@ Search covers the catalogue. It should also cover people, lists and reviews.
   object, which is the other half of §10.2.
 - **Editing a sighting's work.** You can fix every field except *which work it
   was* — a mis-tapped suggestion currently needs delete and re-log.
-- **List reordering in the UI.** `reorderList()` exists and nothing calls it.
 - **Followed-only feed filters** (reviews only, venue only).
 - **Import** from a spreadsheet or another app. Export exists; the door only
   opens one way.

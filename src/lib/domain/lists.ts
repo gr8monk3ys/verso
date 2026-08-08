@@ -132,7 +132,14 @@ export function listItems(listId: number) {
   );
 }
 
-export function addToList(listId: number, workId: number, note = "") {
+/**
+ * Writes take the acting user and verify list ownership themselves, the same
+ * shape as deleteList — list_id arrives from a form, and a form field is not
+ * an authorisation. Before this check, any signed-in account could add to or
+ * delete from anyone's list by posting their list_id.
+ */
+export function addToList(listId: number, userId: number, workId: number, note = "") {
+  if (!get("SELECT 1 FROM lists WHERE id = ? AND user_id = ?", listId, userId)) return;
   const next = get<{ n: number }>(
     "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM list_items WHERE list_id = ?",
     listId,
@@ -147,7 +154,8 @@ export function addToList(listId: number, workId: number, note = "") {
   run("UPDATE lists SET updated_at = datetime('now') WHERE id = ?", listId);
 }
 
-export function removeFromList(listId: number, itemId: number) {
+export function removeFromList(listId: number, userId: number, itemId: number) {
+  if (!get("SELECT 1 FROM lists WHERE id = ? AND user_id = ?", listId, userId)) return;
   run("DELETE FROM list_items WHERE id = ? AND list_id = ?", itemId, listId);
   run("UPDATE lists SET updated_at = datetime('now') WHERE id = ?", listId);
 }
@@ -159,6 +167,41 @@ export function reorderList(listId: number, orderedItemIds: number[]) {
     });
     run("UPDATE lists SET updated_at = datetime('now') WHERE id = ?", listId);
   });
+}
+
+/**
+ * Move one item up or down. The whole reorder UI is two arrows because the
+ * alternative is drag-and-drop, which needs client JS, touch handling and an
+ * optimistic-reorder dance — for lists that are typically ten items long.
+ * Swapping neighbours server-side keeps ordering usable from any browser with
+ * forms, which is the same bar the rest of the app holds itself to.
+ *
+ * Ownership is checked here, not in reorderList: this is the entry point a
+ * form reaches with attacker-suppliable ids.
+ */
+export function moveListItem(
+  listId: number,
+  userId: number,
+  itemId: number,
+  direction: "up" | "down",
+) {
+  const owned = get<{ id: number }>(
+    "SELECT id FROM lists WHERE id = ? AND user_id = ?",
+    listId,
+    userId,
+  );
+  if (!owned) return;
+
+  const ordered = all<{ id: number }>(
+    "SELECT id FROM list_items WHERE list_id = ? ORDER BY position, id",
+    listId,
+  ).map((row) => row.id);
+  const index = ordered.indexOf(itemId);
+  const target = direction === "up" ? index - 1 : index + 1;
+  if (index === -1 || target < 0 || target >= ordered.length) return;
+
+  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  reorderList(listId, ordered);
 }
 
 export function deleteList(listId: number, userId: number) {

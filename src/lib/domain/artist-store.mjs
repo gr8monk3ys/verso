@@ -23,9 +23,14 @@ import { normalizeName, resolveArtists, ulanId } from "./artist-identity.mjs";
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
+ * @param {{dates?: Record<string, {born: number|null, died: number|null}>}} [enrichment]
+ *   Life dates keyed by QID — the checked-in sidecar from
+ *   scripts/ingest/artist-dates.mjs. A sidecar because this table is derived:
+ *   the rebuild below throws every row away, so enrichment written directly to
+ *   the table would survive exactly until the next catalogue change.
  * @returns {{artists: number, works: number, joined: number, refused: string[]}}
  */
-export function buildArtists(db) {
+export function buildArtists(db, { dates = {} } = {}) {
   const rows = db
     .prepare(
       `SELECT id, artist_display, artist_qid, artist_ulan
@@ -41,8 +46,8 @@ export function buildArtists(db) {
   db.exec("DELETE FROM artists");
 
   const insertArtist = db.prepare(
-    `INSERT INTO artists (slug, qid, display_name, sort_name, ulan, work_count)
-     VALUES (?,?,?,?,?,?)`,
+    `INSERT INTO artists (slug, qid, display_name, sort_name, ulan, birth_year, death_year, work_count)
+     VALUES (?,?,?,?,?,?,?,?)`,
   );
   const link = db.prepare(
     "INSERT OR IGNORE INTO work_artists (work_id, artist_id) VALUES (?, ?)",
@@ -64,12 +69,15 @@ export function buildArtists(db) {
     }
     taken.add(slug);
 
+    const lifeDates = artist.qid ? dates[artist.qid] : undefined;
     const result = insertArtist.run(
       slug,
       artist.qid,
       artist.displayName,
       sortName(artist.displayName),
       ulanId(artist.ulan),
+      lifeDates?.born ?? null,
+      lifeDates?.died ?? null,
       artist.workIds.length,
     );
     const artistId = Number(result.lastInsertRowid);

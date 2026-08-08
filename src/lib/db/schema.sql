@@ -195,8 +195,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_displays_open
 CREATE TABLE IF NOT EXISTS sightings (
   id            INTEGER PRIMARY KEY,
   -- Idempotency key minted on the client so the offline queue can retry
-  -- without creating duplicates (§9.1).
-  client_uuid   TEXT UNIQUE,
+  -- without creating duplicates (§9.1). Unique per *user*, not globally — the
+  -- composite index below. The value arrives as untrusted input, and a global
+  -- constraint made someone else's uuid a fact about your inserts: an attacker
+  -- who learned a queued uuid could pre-insert it and block that sync forever.
+  client_uuid   TEXT,
   user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   work_id       INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
   venue_id      INTEGER REFERENCES venues(id) ON DELETE SET NULL,
@@ -219,6 +222,9 @@ CREATE TABLE IF NOT EXISTS sightings (
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Partial: NULL uuids (web-form logs never mint one) stay out of the index.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sightings_client_uuid
+  ON sightings(user_id, client_uuid) WHERE client_uuid IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sightings_user_date ON sightings(user_id, seen_on DESC);
 CREATE INDEX IF NOT EXISTS idx_sightings_work ON sightings(work_id);
 CREATE INDEX IF NOT EXISTS idx_sightings_venue_date ON sightings(venue_id, seen_on);
@@ -448,6 +454,10 @@ CREATE TABLE IF NOT EXISTS artists (
   display_name TEXT NOT NULL,
   sort_name    TEXT NOT NULL DEFAULT '',
   ulan         TEXT,
+  -- Year precision only, from Wikidata P569/P570 where every claim agrees —
+  -- see scripts/ingest/artist-dates.mjs. NULL is "unknown", never 0.
+  birth_year   INTEGER,
+  death_year   INTEGER,
   -- Denormalised so the browse and search paths do not count on every render.
   work_count   INTEGER NOT NULL DEFAULT 0
 );

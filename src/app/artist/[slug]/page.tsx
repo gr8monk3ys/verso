@@ -11,7 +11,7 @@ import {
 } from "@/lib/domain/artists";
 import { Plate } from "@/components/Plate";
 import { Stars } from "@/components/Stars";
-import { displayTitle, pluralize } from "@/lib/format";
+import { displayTitle, lifeDates, pluralize } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +66,9 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
       <header>
         <h1 className="display text-3xl leading-tight">{artist.display_name}</h1>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
+          {lifeDates(artist.birth_year, artist.death_year) && (
+            <>{lifeDates(artist.birth_year, artist.death_year)} · </>
+          )}
           {pluralize(artist.work_count, "work")} on view
           {summary.average !== null && (
             <>
