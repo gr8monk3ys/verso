@@ -54,11 +54,3 @@ export function applyStaffBootstrap() {
   if (!handle) return;
   run("UPDATE users SET is_staff = 1 WHERE handle = ?", handle);
 }
-
-export function grantStaff(handle: string) {
-  run("UPDATE users SET is_staff = 1 WHERE handle = ?", handle.trim().toLowerCase());
-}
-
-export function revokeStaff(handle: string) {
-  run("UPDATE users SET is_staff = 0 WHERE handle = ?", handle.trim().toLowerCase());
-}
