@@ -13,7 +13,7 @@ capture, a social layer, and the metric gates that decide whether the whole idea
 is working.
 
 ```bash
-# Node 24+ — node:sqlite is stable there and `next start` needs no flags
+# Node 24+ (Vercel's default; the libsql driver is a native addon, no flags)
 git clone https://github.com/gr8monk3ys/verso && cd verso
 npm install
 npm run db:reset && npm run db:seed && npm run db:demo
@@ -207,7 +207,9 @@ Colours, type, logo variants and the Open Graph card system:
 ## Architecture
 
 Next.js 15 (App Router) · React 19 · TypeScript · Tailwind 4 · SQLite via
-`node:sqlite`. No ORM, no native modules, no build step for the scripts.
+`libsql` — one synchronous query layer that runs against a **local file** on a
+box or a **remote Turso** database on serverless, no async rewrite between them.
+No ORM, no build step for the scripts. See `ops/DEPLOY.md` for the three shapes.
 
 ```
 src/lib/db/schema.sql        the object model
@@ -254,9 +256,12 @@ measurement rather than a claim.
 
 ## Deployment
 
-For a systemd host, `ops/verso.service.example` is the app unit and
-`ops/verso.env.example` enumerates every variable below in one copy-editable
-file. By hand:
+Three shapes, one codebase — systemd, container, or Vercel + Turso. The full
+sequence for each is in [`ops/DEPLOY.md`](ops/DEPLOY.md); the serverless path
+sets `VERSO_DATABASE_URL` to a Turso database and photos go to Vercel Blob,
+with no change to the query layer. For a systemd host,
+`ops/verso.service.example` is the app unit and `ops/verso.env.example`
+enumerates every variable below in one copy-editable file. By hand:
 
 ```bash
 VERSO_DB_PATH=/var/lib/verso/verso.db \
@@ -286,8 +291,10 @@ Verso preflight · NODE_ENV=production
 
 | Variable | Purpose |
 |---|---|
-| `VERSO_DB_PATH` | SQLite file (default `data/verso.db`) |
-| `VERSO_MEDIA_DIR` | Uploaded sighting photos (default `data/media`) |
+| `VERSO_DATABASE_URL` | Remote Turso database (`libsql://…`) for serverless; unset → local file |
+| `VERSO_DATABASE_AUTH_TOKEN` | Turso token, paired with the URL above |
+| `VERSO_DB_PATH` | Local SQLite file when no URL is set (default `data/verso.db`) |
+| `VERSO_MEDIA_DIR` | Uploaded sighting photos on disk; Vercel Blob replaces it when `BLOB_READ_WRITE_TOKEN` is present |
 | `VERSO_BASE_URL` | Absolute origin — used in sitemaps, share cards, reset links |
 | `VERSO_STAFF_BOOTSTRAP` | Handle promoted to staff on boot; the only way to reach `/internal` on a fresh deploy |
 | `VERSO_MAIL` | `log` (default), `webhook`, or `none` |
