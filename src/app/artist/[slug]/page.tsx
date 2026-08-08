@@ -38,7 +38,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const artist = artistBySlug(slug);
+  const artist = await artistBySlug(slug);
   if (!artist) return { title: "Not here — Verso" };
   return {
     title: `${artist.display_name} — Verso`,
@@ -48,16 +48,16 @@ export async function generateMetadata({
 
 export default async function ArtistPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const artist = artistBySlug(slug);
+  const artist = await artistBySlug(slug);
   if (!artist) notFound();
 
   const viewer = await currentUser();
   const viewerId = viewer?.id ?? null;
 
-  const works = worksByArtist(artist.id, viewerId);
-  const progress = artistProgress(artist.id, viewerId);
-  const summary = artistRatingSummary(artist.id);
-  const reviews = reviewsForArtist(artist.id);
+  const works = await worksByArtist(artist.id, viewerId);
+  const progress = await artistProgress(artist.id, viewerId);
+  const summary = await artistRatingSummary(artist.id);
+  const reviews = await reviewsForArtist(artist.id);
   const maxBar = Math.max(1, ...summary.distribution.map((bucket) => bucket.count));
   const percent = progress.total ? Math.round((progress.seen / progress.total) * 100) : 0;
 

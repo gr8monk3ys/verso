@@ -43,12 +43,12 @@
 export const K_ANONYMITY = 5;
 
 /** Tiny query helpers so this module needs nothing but an open db handle. */
-function query(db, sql, ...params) {
-  return db.prepare(sql).all(...params);
+async function query(db, sql, ...params) {
+  return await db.prepare(sql).all(...params);
 }
 
-function one(db, sql, ...params) {
-  return db.prepare(sql).get(...params);
+async function one(db, sql, ...params) {
+  return await db.prepare(sql).get(...params);
 }
 
 const PUBLIC_ONLY = `
@@ -60,16 +60,16 @@ const PUBLIC_ONLY = `
  * Headline numbers for a venue. Suppressed wholesale if the venue is quiet.
  * @param {any} db @param {number} venueId @returns {VenueOverview}
  */
-export function venueOverview(db, venueId) {
-  const row = one(db,
+export async function venueOverview(db, venueId) {
+  const row = await one(db,
     `SELECT COUNT(DISTINCT s.user_id) AS visitors,
             COUNT(*) AS sightings,
             COUNT(DISTINCT s.work_id) AS works_logged,
             AVG(s.rating) / 2.0 AS avg_rating,
             SUM(CASE WHEN s.rating IS NOT NULL THEN 1 ELSE 0 END) AS rated,
             SUM(CASE WHEN s.review IS NOT NULL AND trim(s.review) <> '' THEN 1 ELSE 0 END) AS reviewed,
-            MIN(COALESCE(s.seen_on, date(s.created_at))) AS first_log,
-            MAX(COALESCE(s.seen_on, date(s.created_at))) AS last_log
+            MIN(COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD'))) AS first_log,
+            MAX(COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD'))) AS last_log
        FROM sightings s JOIN users u ON u.id = s.user_id
       WHERE s.venue_id = ? AND ${PUBLIC_ONLY}`,
     venueId,
@@ -82,8 +82,8 @@ export function venueOverview(db, venueId) {
  * for, and the one their own visitor surveys answer worst.
  */
 /** @param {any} db @param {number} venueId @param {number} limit @returns {WorkAttention[]} */
-export function attentionByWork(db, venueId, limit = 40) {
-  const rows = query(db,
+export async function attentionByWork(db, venueId, limit = 40) {
+  const rows = await query(db,
     `SELECT w.id, w.slug, w.title, w.artist_display,
             (SELECT d.location_label FROM displays d
               WHERE d.work_id = w.id AND d.venue_id = ? AND d.ended_on IS NULL LIMIT 1) AS location_label,
@@ -118,8 +118,8 @@ export function attentionByWork(db, venueId, limit = 40) {
  * Room-level attention: which galleries hold people and which they walk through.
  * @param {any} db @param {number} venueId @returns {RoomAttention[]}
  */
-export function attentionByRoom(db, venueId) {
-  const rows = query(db,
+export async function attentionByRoom(db, venueId) {
+  const rows = await query(db,
     `SELECT d.location_label AS room,
             COUNT(DISTINCT s.user_id) AS visitors,
             COUNT(s.id) AS sightings,
@@ -146,8 +146,8 @@ export function attentionByRoom(db, venueId) {
  * list, and impossible to suppress-leak: it is an absence, not a person.
  */
 /** @param {any} db @param {number} venueId @param {number} limit @returns {OverlookedWork[]} */
-export function overlookedWorks(db, venueId, limit = 20) {
-  return query(db,
+export async function overlookedWorks(db, venueId, limit = 20) {
+  return await query(db,
     `SELECT w.id, w.slug, w.title, w.artist_display, d.location_label
        FROM displays d JOIN works w ON w.id = d.work_id
       WHERE d.venue_id = ? AND d.ended_on IS NULL
@@ -171,18 +171,18 @@ export function overlookedWorks(db, venueId, limit = 20) {
  * Visits over time, weekly, suppressed per bucket.
  * @param {any} db @param {number} venueId @param {number} weeks @returns {WeekBucket[]}
  */
-export function visitsByWeek(db, venueId, weeks = 26) {
-  return query(db,
-    `SELECT strftime('%Y-%W', COALESCE(s.seen_on, date(s.created_at))) AS week,
+export async function visitsByWeek(db, venueId, weeks = 26) {
+  return (await query(db,
+    `SELECT to_char(COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD'))::timestamp, 'IYYY-IW') AS week,
             COUNT(DISTINCT s.user_id) AS visitors,
             COUNT(*) AS sightings
        FROM sightings s JOIN users u ON u.id = s.user_id
       WHERE s.venue_id = ? AND ${PUBLIC_ONLY}
-        AND COALESCE(s.seen_on, date(s.created_at)) >= date('now', ?)
+        AND COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD')) >= to_char((now() AT TIME ZONE 'utc')::date - make_interval(days => ?), 'YYYY-MM-DD')
       GROUP BY week ORDER BY week`,
     venueId,
-    `-${weeks * 7} days`,
-  ).map((row) => ({
+    weeks * 7,
+  )).map((row) => ({
     ...row,
     visitors: row.visitors >= K_ANONYMITY ? row.visitors : 0,
     sightings: row.visitors >= K_ANONYMITY ? row.sightings : 0,

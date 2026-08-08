@@ -28,14 +28,14 @@ export default async function DiaryPage({
   const { page: pageParam } = await searchParams;
   const page = Math.max(0, Number(pageParam ?? 0) || 0);
 
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile) notFound();
 
   const viewer = await currentUser();
   const viewerId = viewer?.id ?? null;
   if (profile.is_private && viewerId !== profile.id) notFound();
 
-  const sightings = sightingsForUser(profile.id, {
+  const sightings = await sightingsForUser(profile.id, {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     viewerId,

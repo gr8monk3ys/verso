@@ -58,51 +58,54 @@ function share(part, whole) {
 }
 
 /**
- * @param {import('libsql').Database} db
+ * @param {any} db
  * @param {{windowDays?: number, catalogueEval?: {precision: number|null,
  *          sampled: number, generatedAt: string, source: string} | null}} options
  *   catalogueEval is the summary written by scripts/eval-reconciliation.mjs.
  *   Passed in rather than read from disk here so the gate arithmetic stays a pure
  *   function the tests can drive with fixed numbers.
  */
-export function computeMetrics(db, { windowDays = 90, catalogueEval = null } = {}) {
-  const since = `-${windowDays} days`;
+export async function computeMetrics(db, { windowDays = 90, catalogueEval = null } = {}) {
+  // Positive integer days; subtracted from now() via make_interval below.
+  const since = Math.trunc(windowDays);
+  const SINCE =
+    "to_char((now() AT TIME ZONE 'utc') - make_interval(days => ?), 'YYYY-MM-DD HH24:MI:SS')";
 
   // --- V0: frequency -------------------------------------------------------
-  const perUserMonth = db
+  const perUserMonth = await db
     .prepare(
-      `SELECT user_id, strftime('%Y-%m', created_at) AS month, COUNT(*) AS n
+      `SELECT user_id, to_char(created_at::timestamp, 'YYYY-MM') AS month, COUNT(*) AS n
          FROM sightings
-        WHERE created_at >= datetime('now', ?)
+        WHERE created_at >= ${SINCE}
         GROUP BY user_id, month`,
     )
     .all(since);
   const medianWorksPerActiveUserPerMonth = median(perUserMonth.map((r) => r.n));
 
-  const totalUsers = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
+  const totalUsers = (await db.prepare("SELECT COUNT(*) AS n FROM users").get()).n;
 
   // Retention: of users who signed up long enough ago to have a week 5, how
   // many logged something during it.
-  const retention = db
+  const retention = await db
     .prepare(
       `WITH cohort AS (
          SELECT id, created_at FROM users
-          WHERE julianday('now') - julianday(created_at) >= 35
+          WHERE ((now() AT TIME ZONE 'utc')::date - created_at::date) >= 35
        )
        SELECT
          (SELECT COUNT(*) FROM cohort) AS eligible,
          (SELECT COUNT(DISTINCT c.id)
             FROM cohort c
             JOIN sightings s ON s.user_id = c.id
-           WHERE julianday(s.created_at) - julianday(c.created_at) BETWEEN 28 AND 35
+           WHERE (s.created_at::date - c.created_at::date) BETWEEN 28 AND 35
          ) AS retained`,
     )
     .get();
 
-  const multiDay = db
+  const multiDay = await db
     .prepare(
       `WITH days AS (
-         SELECT user_id, COUNT(DISTINCT date(created_at)) AS d
+         SELECT user_id, COUNT(DISTINCT created_at::date) AS d
            FROM sightings GROUP BY user_id
        )
        SELECT
@@ -112,7 +115,7 @@ export function computeMetrics(db, { windowDays = 90, catalogueEval = null } = {
     .get();
 
   // --- V1: engagement ------------------------------------------------------
-  const attach = db
+  const attach = await db
     .prepare(
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN rating IS NOT NULL THEN 1 ELSE 0 END) AS rated,
@@ -121,24 +124,24 @@ export function computeMetrics(db, { windowDays = 90, catalogueEval = null } = {
     )
     .get();
 
-  const follows = db
+  const follows = await db
     .prepare(
       `SELECT u.id, (SELECT COUNT(*) FROM follows f WHERE f.follower_id = u.id) AS n
          FROM users u`,
     )
     .all();
 
-  const activeUserIds = db
+  const activeUserIds = (await db
     .prepare(
-      `SELECT DISTINCT user_id FROM sightings WHERE created_at >= datetime('now', ?)`,
+      `SELECT DISTINCT user_id FROM sightings WHERE created_at >= ${SINCE}`,
     )
-    .all(since)
+    .all(since))
     .map((r) => r.user_id);
 
-  const feedOpens = db
+  const feedOpens = await db
     .prepare(
       `SELECT user_id, COUNT(*) AS n FROM events
-        WHERE kind = 'feed_open' AND at >= datetime('now', ?)
+        WHERE kind = 'feed_open' AND at >= ${SINCE}
         GROUP BY user_id`,
     )
     .all(since);
@@ -147,12 +150,12 @@ export function computeMetrics(db, { windowDays = 90, catalogueEval = null } = {
   const perWeek = activeUserIds.map((id) => (opensByUser.get(id) ?? 0) / weeks);
 
   // --- Guardrail: recognition ---------------------------------------------
-  const recognition = db
+  const recognition = await db
     .prepare(
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN chosen_rank = 0 THEN 1 ELSE 0 END) AS top_accepted
          FROM recognition_events
-        WHERE chosen_work_id IS NOT NULL AND created_at >= datetime('now', ?)`,
+        WHERE chosen_work_id IS NOT NULL AND created_at >= ${SINCE}`,
     )
     .get(since);
 
@@ -161,9 +164,9 @@ export function computeMetrics(db, { windowDays = 90, catalogueEval = null } = {
     generatedAt: new Date().toISOString(),
     totals: {
       users: Number(totalUsers),
-      works: Number(db.prepare("SELECT COUNT(*) AS n FROM works").get().n),
-      sightings: Number(db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n),
-      venues: Number(db.prepare("SELECT COUNT(*) AS n FROM venues").get().n),
+      works: Number((await db.prepare("SELECT COUNT(*) AS n FROM works").get()).n),
+      sightings: Number((await db.prepare("SELECT COUNT(*) AS n FROM sightings").get()).n),
+      venues: Number((await db.prepare("SELECT COUNT(*) AS n FROM venues").get()).n),
       activeUsers: activeUserIds.length,
     },
     v0: {

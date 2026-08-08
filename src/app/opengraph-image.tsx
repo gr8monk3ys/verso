@@ -6,7 +6,7 @@ export const contentType = OG_CONTENT_TYPE;
 export const alt = "Verso — log the art you see";
 
 export default async function Image() {
-  const stats = catalogueStats();
+  const stats = await catalogueStats();
   return ogCard({
     eyebrow: "A diary for artworks",
     title: "Log the art you actually see.",

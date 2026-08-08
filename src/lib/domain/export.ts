@@ -36,13 +36,13 @@ type ExportRow = {
   verso_work_slug: string;
 };
 
-export function exportRows(userId: number): ExportRow[] {
+export async function exportRows(userId: number): Promise<ExportRow[]> {
   return all<ExportRow>(
     `SELECT s.id AS sighting_id, s.seen_on, s.date_precision, s.created_at AS logged_at,
             w.title, w.artist_display AS artist, w.date_display, w.medium,
             v.name AS venue, e.title AS exhibition,
             s.rating / 2.0 AS rating_out_of_5, s.review, s.private_note,
-            (SELECT group_concat(t.tag, ' ') FROM sighting_tags t WHERE t.sighting_id = s.id) AS tags,
+            (SELECT string_agg(t.tag::text, ' ') FROM sighting_tags t WHERE t.sighting_id = s.id) AS tags,
             s.encounter, s.source, s.is_private,
             w.wikidata_qid,
             (SELECT value FROM work_identifiers i WHERE i.work_id = w.id AND i.scheme = 'met_object_id') AS met_object_id,
@@ -53,7 +53,7 @@ export function exportRows(userId: number): ExportRow[] {
        LEFT JOIN venues v ON v.id = s.venue_id
        LEFT JOIN exhibitions e ON e.id = s.exhibition_id
       WHERE s.user_id = ?
-      ORDER BY COALESCE(s.seen_on, date(s.created_at)), s.id`,
+      ORDER BY COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD')), s.id`,
     userId,
   );
 }
@@ -65,39 +65,42 @@ const COLUMNS: (keyof ExportRow)[] = [
   "met_object_id", "accession_number", "verso_work_slug",
 ];
 
-export function exportCsv(userId: number): string {
-  const rows = exportRows(userId);
+export async function exportCsv(userId: number): Promise<string> {
+  const rows = await exportRows(userId);
   return csvDocument(
     COLUMNS as string[],
     rows.map((row) => COLUMNS.map((column) => row[column])),
   );
 }
 
-export function exportJson(userId: number, handle: string): string {
-  const sightings = exportRows(userId);
-  const lists = all<{ id: number; title: string; description: string; is_public: number }>(
+export async function exportJson(userId: number, handle: string): Promise<string> {
+  const sightings = await exportRows(userId);
+  const listRows = await all<{ id: number; title: string; description: string; is_public: number }>(
     "SELECT id, title, description, is_public FROM lists WHERE user_id = ? ORDER BY id",
     userId,
-  ).map((list) => ({
-    title: list.title,
-    description: list.description,
-    public: Boolean(list.is_public),
-    items: all<{ title: string; artist_display: string; slug: string; wikidata_qid: string | null; note: string }>(
-      `SELECT w.title, w.artist_display, w.slug, w.wikidata_qid, i.note
-         FROM list_items i JOIN works w ON w.id = i.work_id
-        WHERE i.list_id = ? ORDER BY i.position`,
-      list.id,
-    ),
-  }));
+  );
+  const lists = await Promise.all(
+    listRows.map(async (list) => ({
+      title: list.title,
+      description: list.description,
+      public: Boolean(list.is_public),
+      items: await all<{ title: string; artist_display: string; slug: string; wikidata_qid: string | null; note: string }>(
+        `SELECT w.title, w.artist_display, w.slug, w.wikidata_qid, i.note
+           FROM list_items i JOIN works w ON w.id = i.work_id
+          WHERE i.list_id = ? ORDER BY i.position`,
+        list.id,
+      ),
+    })),
+  );
 
-  const watchlist = all<{ title: string; artist_display: string; slug: string; wikidata_qid: string | null }>(
+  const watchlist = await all<{ title: string; artist_display: string; slug: string; wikidata_qid: string | null }>(
     `SELECT w.title, w.artist_display, w.slug, w.wikidata_qid
        FROM watchlist wl JOIN works w ON w.id = wl.work_id
       WHERE wl.user_id = ? ORDER BY wl.created_at`,
     userId,
   );
 
-  const favourites = all<{ title: string; artist_display: string; slug: string; wikidata_qid: string | null; position: number }>(
+  const favourites = await all<{ title: string; artist_display: string; slug: string; wikidata_qid: string | null; position: number }>(
     `SELECT w.title, w.artist_display, w.slug, w.wikidata_qid, f.position
        FROM favourites f JOIN works w ON w.id = f.work_id
       WHERE f.user_id = ? ORDER BY f.position`,

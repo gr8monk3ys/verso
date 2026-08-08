@@ -21,9 +21,9 @@ export const metadata: Metadata = {
  * with three weeks left is more actionable than one with two years.
  */
 export default async function ExhibitionsPage() {
-  const current = currentExhibitions(60);
-  const upcoming = upcomingExhibitions(20);
-  const past = pastExhibitions(20);
+  const current = await currentExhibitions(60);
+  const upcoming = await upcomingExhibitions(20);
+  const past = await pastExhibitions(20);
   const closing = current.filter((show) => show.ends_on != null);
   const ongoing = current.filter((show) => show.ends_on == null);
 

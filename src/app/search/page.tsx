@@ -17,13 +17,13 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
   const venueSlug = typeof params.venue === "string" ? params.venue : "";
   const onView = params.onview === "1";
 
-  const venues = activeVenues();
+  const venues = await activeVenues();
   const venue = venues.find((item) => item.slug === venueSlug);
 
-  const artists = query.trim().length >= 2 ? searchArtists(query) : [];
+  const artists = query.trim().length >= 2 ? await searchArtists(query) : [];
   const results: WorkCard[] = tag
-    ? worksByTag(tag)
-    : searchWorks(query, { limit: 60, venueId: venue?.id ?? null, onViewOnly: onView });
+    ? await worksByTag(tag)
+    : await searchWorks(query, { limit: 60, venueId: venue?.id ?? null, onViewOnly: onView });
 
   return (
     <div>

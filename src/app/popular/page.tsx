@@ -26,7 +26,7 @@ export const metadata: Metadata = {
  * a heading that claims otherwise.
  */
 export default async function PopularPage() {
-  const { label, window, works } = popularChart(24);
+  const { label, window, works } = await popularChart(24);
 
   return (
     <div className="pb-10">

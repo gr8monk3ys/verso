@@ -7,11 +7,11 @@ export async function GET(request: Request) {
   if (!user) return new Response("not signed in", { status: 401 });
 
   const format = new URL(request.url).searchParams.get("format") ?? "csv";
-  recordEvent(user.id, "export", { format });
+  await recordEvent(user.id, "export", { format });
 
   const stamp = new Date().toISOString().slice(0, 10);
   if (format === "json") {
-    return new Response(exportJson(user.id, user.handle), {
+    return new Response(await exportJson(user.id, user.handle), {
       headers: {
         "content-type": "application/json; charset=utf-8",
         "content-disposition": `attachment; filename="verso-${user.handle}-${stamp}.json"`,
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     });
   }
 
-  return new Response(exportCsv(user.id), {
+  return new Response(await exportCsv(user.id), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="verso-${user.handle}-${stamp}.csv"`,

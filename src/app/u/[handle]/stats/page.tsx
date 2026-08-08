@@ -10,14 +10,14 @@ export const dynamic = "force-dynamic";
 
 export default async function StatsPage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile) notFound();
 
   const viewer = await currentUser();
   const viewerId = viewer?.id ?? null;
   if (profile.is_private && viewerId !== profile.id) notFound();
 
-  const stats = profileStats(profile.id, viewerId);
+  const stats = await profileStats(profile.id, viewerId);
   const maxMonth = Math.max(1, ...stats.byMonth.map((month) => month.n));
   const maxRating = Math.max(1, ...stats.ratingHistogram.map((bucket) => bucket.n));
 

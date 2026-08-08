@@ -66,10 +66,10 @@ export async function signInAction(_state: AuthState, formData: FormData): Promi
   const limit = checkRateLimit(`signin:${identifier.trim().toLowerCase()}`);
   if (!limit.ok) return { error: limit.error };
 
-  const result = authenticate(identifier, password);
+  const result = await authenticate(identifier, password);
   if (!result.ok) return { error: result.error };
   clearRateLimit(`signin:${identifier.trim().toLowerCase()}`);
-  await setSessionCookie(createSession(result.userId));
+  await setSessionCookie(await createSession(result.userId));
   redirect(safeNext(formData.get("next")) ?? "/");
 }
 
@@ -77,14 +77,14 @@ export async function signUpAction(_state: AuthState, formData: FormData): Promi
   const limit = checkRateLimit("signup");
   if (!limit.ok) return { error: limit.error };
 
-  const result = registerUser({
+  const result = await registerUser({
     handle: String(formData.get("handle") ?? ""),
     displayName: String(formData.get("display_name") ?? ""),
     email: String(formData.get("email") ?? ""),
     password: String(formData.get("password") ?? ""),
   });
   if (!result.ok) return { error: result.error };
-  await setSessionCookie(createSession(result.userId));
+  await setSessionCookie(await createSession(result.userId));
   redirect("/onboarding");
 }
 
@@ -102,12 +102,12 @@ export async function logSightingAction(formData: FormData) {
     redirect(`/search?error=${encodeURIComponent(input.error)}`);
   }
 
-  createSighting({ ...input, userId: user.id });
+  await createSighting({ ...input, userId: user.id });
 
   // Recognition telemetry, when the capture screen supplied it (§13 guardrail).
   const rank = formData.get("recognition_rank");
   if (rank != null && rank !== "") {
-    recordRecognition({
+    await recordRecognition({
       userId: user.id,
       venueId: input.venueId ?? null,
       topWorkId: Number(formData.get("recognition_top") ?? 0) || null,
@@ -117,7 +117,7 @@ export async function logSightingAction(formData: FormData) {
     });
   }
 
-  const work = get<{ slug: string }>("SELECT slug FROM works WHERE id = ?", input.workId);
+  const work = await get<{ slug: string }>("SELECT slug FROM works WHERE id = ?", input.workId);
   revalidatePath("/");
   revalidatePath(`/u/${user.handle}`);
   if (work) revalidatePath(`/work/${work.slug}`);
@@ -134,7 +134,7 @@ export async function updateSightingAction(formData: FormData) {
   // rendered must not be written back as its empty value: that flipped
   // private sightings public and erased private notes when rating from the
   // queue.
-  updateSighting(id, user.id, sightingPatchFromForm(formData));
+  await updateSighting(id, user.id, sightingPatchFromForm(formData));
   revalidatePath("/me/queue");
   revalidatePath(`/u/${user.handle}`);
   const next = String(formData.get("next") ?? "");
@@ -143,7 +143,7 @@ export async function updateSightingAction(formData: FormData) {
 
 export async function deleteSightingAction(formData: FormData) {
   const user = await actor();
-  deleteSighting(Number(formData.get("sighting_id")), user.id);
+  await deleteSighting(Number(formData.get("sighting_id")), user.id);
   revalidatePath(`/u/${user.handle}`);
   const next = String(formData.get("next") ?? "");
   if (next) redirect(next);
@@ -178,7 +178,7 @@ export async function toggleLikeAction(formData: FormData) {
     revalidatePath(String(formData.get("next") ?? "/"));
     return;
   }
-  toggleLike(user.id, Number(formData.get("sighting_id")));
+  await toggleLike(user.id, Number(formData.get("sighting_id")));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
@@ -188,7 +188,7 @@ export async function addCommentAction(formData: FormData) {
   if (!checkRateLimit(`comment:${user.id}`, WRITE_LIMITS.comment).ok) {
     redirect(String(formData.get("next") ?? "/"));
   }
-  addComment(user.id, Number(formData.get("sighting_id")), String(formData.get("body") ?? ""));
+  await addComment(user.id, Number(formData.get("sighting_id")), String(formData.get("body") ?? ""));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
@@ -199,14 +199,14 @@ export async function toggleFollowAction(formData: FormData) {
     return;
   }
   const targetId = Number(formData.get("user_id"));
-  if (isFollowing(user.id, targetId)) unfollow(user.id, targetId);
-  else follow(user.id, targetId);
+  if (await isFollowing(user.id, targetId)) await unfollow(user.id, targetId);
+  else await follow(user.id, targetId);
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
 export async function toggleWatchAction(formData: FormData) {
   const user = await actor();
-  toggleWatch(user.id, Number(formData.get("work_id")));
+  await toggleWatch(user.id, Number(formData.get("work_id")));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
@@ -225,19 +225,19 @@ export async function toggleFavouriteAction(formData: FormData) {
   const next = safeNext(formData.get("next")) ?? "/";
 
   if (formData.get("undo")) {
-    removeFavouriteWork(user.id, workId);
+    await removeFavouriteWork(user.id, workId);
     revalidatePath(next);
     return;
   }
 
-  const result = addFavouriteWork(user.id, workId);
+  const result = await addFavouriteWork(user.id, workId);
   revalidatePath(next);
   if (!result.ok) redirect(`${next}?favourite=${result.reason}`);
 }
 
 export async function markNotificationsReadAction() {
   const user = await actor();
-  markNotificationsRead(user.id);
+  await markNotificationsRead(user.id);
   revalidatePath("/notifications");
 }
 
@@ -248,7 +248,7 @@ export async function createListAction(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
   if (!checkRateLimit(`list:${user.id}`, WRITE_LIMITS.list).ok) return;
-  const list = createList({
+  const list = await createList({
     userId: user.id,
     title,
     description: String(formData.get("description") ?? ""),
@@ -256,19 +256,19 @@ export async function createListAction(formData: FormData) {
     isRanked: formData.get("is_ranked") === "on",
   });
   const workId = Number(formData.get("work_id"));
-  if (workId) addToList(list.id, user.id, workId);
+  if (workId) await addToList(list.id, user.id, workId);
   redirect(`/u/${user.handle}/list/${list.slug}`);
 }
 
 export async function addToListAction(formData: FormData) {
   const user = await actor();
-  addToList(Number(formData.get("list_id")), user.id, Number(formData.get("work_id")));
+  await addToList(Number(formData.get("list_id")), user.id, Number(formData.get("work_id")));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
 export async function removeFromListAction(formData: FormData) {
   const user = await actor();
-  removeFromList(Number(formData.get("list_id")), user.id, Number(formData.get("item_id")));
+  await removeFromList(Number(formData.get("list_id")), user.id, Number(formData.get("item_id")));
   revalidatePath(String(formData.get("next") ?? "/"));
 }
 
@@ -276,7 +276,7 @@ export async function removeFromListAction(formData: FormData) {
 export async function moveListItemAction(formData: FormData) {
   const user = await actor();
   const direction = formData.get("direction") === "up" ? "up" : "down";
-  moveListItem(
+  await moveListItem(
     Number(formData.get("list_id")),
     user.id,
     Number(formData.get("item_id")),
@@ -287,7 +287,7 @@ export async function moveListItemAction(formData: FormData) {
 
 export async function deleteListAction(formData: FormData) {
   const user = await actor();
-  deleteList(Number(formData.get("list_id")), user.id);
+  await deleteList(Number(formData.get("list_id")), user.id);
   redirect(`/u/${user.handle}/lists`);
 }
 
@@ -295,5 +295,5 @@ export async function deleteListAction(formData: FormData) {
 
 export async function recordEventAction(kind: string, meta?: unknown) {
   const user = await currentUser();
-  recordEvent(user?.id ?? null, kind, meta);
+  await recordEvent(user?.id ?? null, kind, meta);
 }

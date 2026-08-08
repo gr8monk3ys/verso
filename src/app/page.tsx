@@ -30,16 +30,16 @@ export default async function HomePage({
   // The V1 gate measures feed opens. Deduplicated per half hour so it counts
   // openings rather than renders — this page is dynamic, and prefetches and
   // back-navigations would otherwise inflate it (§13).
-  recordEventOncePerWindow(user.id, "feed_open");
+  await recordEventOncePerWindow(user.id, "feed_open");
 
   const PAGE = 30;
-  const feed = feedForUser(user.id, { limit: PAGE, offset: page * PAGE });
-  const liked = likedByUser(
+  const feed = await feedForUser(user.id, { limit: PAGE, offset: page * PAGE });
+  const liked = await likedByUser(
     user.id,
     feed.map((item) => item.id),
   );
-  const unrated = unratedCount(user.id);
-  const suggestions = feed.length < 5 ? suggestedUsers(user.id, 5) : [];
+  const unrated = await unratedCount(user.id);
+  const suggestions = feed.length < 5 ? await suggestedUsers(user.id, 5) : [];
 
   return (
     <div>
@@ -128,10 +128,10 @@ export default async function HomePage({
 }
 
 async function Landing() {
-  const stats = catalogueStats();
-  const venues = activeVenues();
-  const exhibitions = currentExhibitions(3);
-  const chart = popularChart(6);
+  const stats = await catalogueStats();
+  const venues = await activeVenues();
+  const exhibitions = await currentExhibitions(3);
+  const chart = await popularChart(6);
 
   return (
     <div className="pb-8">

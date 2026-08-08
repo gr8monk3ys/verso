@@ -22,11 +22,11 @@ export default async function EditSightingPage({
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const sighting = sightingById(Number(id));
+  const sighting = await sightingById(Number(id));
   if (!sighting) notFound();
   if (sighting.user_id !== user.id) notFound();
 
-  const venues = activeVenues().map((venue) => ({ id: venue.id, name: venue.name }));
+  const venues = (await activeVenues()).map((venue) => ({ id: venue.id, name: venue.name }));
 
   return (
     <div className="pb-10">

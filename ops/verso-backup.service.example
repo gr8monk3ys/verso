@@ -4,6 +4,13 @@
 #   systemctl daemon-reload
 #   systemctl enable --now verso-backup.timer
 #
+# PENDING A POSTGRES PORT — do not enable this yet. scripts/backup.mjs and
+# scripts/restore.mjs still speak SQLite (VACUUM INTO, PRAGMA integrity_check)
+# and predate the move to Postgres; they have not been ported to a pg_dump of
+# the PGlite store (VERSO_PGLITE_PATH below) or a local Postgres server. Until
+# they are, copy data/ offsite by hand. On serverless, backups are Neon's job.
+# Tracked in docs/ROADMAP.md.
+#
 # WorkingDirectory is load-bearing: schema.sql is read relative to it. If you run
 # Verso from somewhere else, set VERSO_SCHEMA_PATH instead of guessing.
 
@@ -16,7 +23,7 @@ Type=oneshot
 User=verso
 WorkingDirectory=/srv/verso
 Environment=NODE_ENV=production
-Environment=VERSO_DB_PATH=/var/lib/verso/verso.db
+Environment=VERSO_PGLITE_PATH=/var/lib/verso/pgdata
 Environment=VERSO_MEDIA_DIR=/var/lib/verso/media
 Environment=VERSO_BACKUP_DIR=/var/lib/verso/backups
 Environment=VERSO_BACKUP_HOOK=/srv/verso/ops/offsite.sh

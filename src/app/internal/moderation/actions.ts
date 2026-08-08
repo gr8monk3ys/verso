@@ -11,20 +11,20 @@ export async function resolveReportAction(formData: FormData) {
   const decision = String(formData.get("decision"));
 
   if (decision === "hide-sighting") {
-    hideSighting(db(), Number(formData.get("subject_id")));
-    resolveReport(db(), id, staff.id, "actioned");
+    await hideSighting(await db(), Number(formData.get("subject_id")));
+    await resolveReport(await db(), id, staff.id, "actioned");
   } else if (decision === "delete-comment") {
-    deleteComment(db(), Number(formData.get("subject_id")));
-    resolveReport(db(), id, staff.id, "actioned");
+    await deleteComment(await db(), Number(formData.get("subject_id")));
+    await resolveReport(await db(), id, staff.id, "actioned");
   } else {
-    resolveReport(db(), id, staff.id, "dismissed");
+    await resolveReport(await db(), id, staff.id, "dismissed");
   }
   revalidatePath("/internal/moderation");
 }
 
 export async function resolveWorkRequestAction(formData: FormData) {
   await requireStaff();
-  db()
+  (await db())
     .prepare("UPDATE work_requests SET status = ? WHERE id = ?")
     .run(String(formData.get("status")) === "added" ? "added" : "rejected",
          Number(formData.get("request_id")));

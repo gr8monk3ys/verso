@@ -29,7 +29,7 @@ export async function changePasswordAction(
   const current = String(formData.get("current_password") ?? "");
   const next = String(formData.get("new_password") ?? "");
 
-  const stored = get<{ password_hash: string }>(
+  const stored = await get<{ password_hash: string }>(
     "SELECT password_hash FROM users WHERE id = ?",
     user.id,
   );
@@ -42,7 +42,7 @@ export async function changePasswordAction(
   // Every other device is signed out; the one changing the password keeps a
   // fresh session so this doesn't read as being kicked out of your own account.
   run("DELETE FROM sessions WHERE user_id = ?", user.id);
-  await setSessionCookie(createSession(user.id));
+  await setSessionCookie(await createSession(user.id));
 
   return { done: "Password changed. Any other devices have been signed out." };
 }
@@ -68,7 +68,7 @@ export async function requestResetAction(
   if (!limit.ok) return { error: limit.error };
   if (!identifier) return generic;
 
-  const issued = createResetToken(db(), identifier);
+  const issued = await createResetToken(await db(), identifier);
   if (issued?.email) {
     const url = `${baseUrl()}/reset/${issued.token}`;
     await sendMail({ to: issued.email, ...resetEmail(issued.handle, url) });
@@ -83,10 +83,10 @@ export async function completeResetAction(
   const token = String(formData.get("token") ?? "");
   const password = String(formData.get("password") ?? "");
 
-  const result = consumeResetToken(db(), token, password);
+  const result = await consumeResetToken(await db(), token, password);
   if (!result.ok) return { error: result.error };
 
-  await setSessionCookie(createSession(result.userId));
+  await setSessionCookie(await createSession(result.userId));
   redirect("/");
 }
 
@@ -116,7 +116,7 @@ export async function deleteAccountAction(
   if (confirmation !== user.handle) {
     return { error: `Type your handle (${user.handle}) to confirm.` };
   }
-  const stored = get<{ password_hash: string }>(
+  const stored = await get<{ password_hash: string }>(
     "SELECT password_hash FROM users WHERE id = ?",
     user.id,
   );
@@ -126,7 +126,7 @@ export async function deleteAccountAction(
 
   // Collected before the cascade takes the rows that name them: photographs live
   // on disk, and only the sighting rows know which files were theirs.
-  const photos = all<{ photo_path: string }>(
+  const photos = await all<{ photo_path: string }>(
     "SELECT photo_path FROM sightings WHERE user_id = ? AND photo_path IS NOT NULL",
     user.id,
   );
@@ -144,7 +144,7 @@ export async function blockUserAction(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
   const targetId = Number(formData.get("user_id"));
-  if (formData.get("undo") === "1") unblock(db(), user.id, targetId);
-  else block(db(), user.id, targetId);
+  if (formData.get("undo") === "1") await unblock(await db(), user.id, targetId);
+  else await block(await db(), user.id, targetId);
   revalidatePath(String(formData.get("next") ?? "/"));
 }

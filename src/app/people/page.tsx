@@ -13,8 +13,8 @@ export default async function PeoplePage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const suggestions = suggestedUsers(user.id, 10);
-  const active = all<{
+  const suggestions = await suggestedUsers(user.id, 10);
+  const active = await all<{
     id: number;
     handle: string;
     display_name: string;
@@ -27,7 +27,13 @@ export default async function PeoplePage() {
       GROUP BY u.id ORDER BY n DESC LIMIT 20`,
     user.id,
   );
-  const lists = publicLists(8);
+  const lists = await publicLists(8);
+  const suggestionFollows = await Promise.all(
+    suggestions.map((person) => isFollowing(user.id, person.id)),
+  );
+  const activeFollows = await Promise.all(
+    active.map((person) => isFollowing(user.id, person.id)),
+  );
 
   return (
     <div className="pb-10">
@@ -37,7 +43,7 @@ export default async function PeoplePage() {
         <section className="mt-6">
           <h2 className="label-caps mb-2">Overlaps with what you log</h2>
           <ul className="divide-y divide-[var(--color-line)] border-y rule">
-            {suggestions.map((person) => (
+            {suggestions.map((person, i) => (
               <li key={person.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <Link href={`/u/${person.handle}`} className="block truncate">
@@ -48,7 +54,7 @@ export default async function PeoplePage() {
                     {pluralize(person.overlap, "work")} you&apos;ve both seen
                   </p>
                 </div>
-                <FollowButton userId={person.id} following={isFollowing(user.id, person.id)} />
+                <FollowButton userId={person.id} following={suggestionFollows[i]} />
               </li>
             ))}
           </ul>
@@ -58,7 +64,7 @@ export default async function PeoplePage() {
       <section className="mt-8">
         <h2 className="label-caps mb-2">Everyone</h2>
         <ul className="divide-y divide-[var(--color-line)] border-y rule">
-          {active.map((person) => (
+          {active.map((person, i) => (
             <li key={person.id} className="flex items-center justify-between gap-3 py-3">
               <div className="min-w-0">
                 <Link href={`/u/${person.handle}`} className="block truncate">
@@ -70,7 +76,7 @@ export default async function PeoplePage() {
                   {person.bio ? ` · ${person.bio}` : ""}
                 </p>
               </div>
-              <FollowButton userId={person.id} following={isFollowing(user.id, person.id)} />
+              <FollowButton userId={person.id} following={activeFollows[i]} />
             </li>
           ))}
         </ul>

@@ -1,6 +1,10 @@
 import "server-only";
 import { all, get } from "@/lib/db";
 
+// starts_on / ends_on are TEXT dates ('YYYY-MM-DD'), so compare against a
+// text-formatted "today" rather than a Postgres date.
+const TODAY = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD')";
+
 export type Venue = {
   id: number;
   slug: string;
@@ -15,26 +19,28 @@ export type Venue = {
 };
 
 /** Venues with a catalogue. A venue with no works is a listing, not a place to log. */
-export function activeVenues() {
-  return all<Venue & { work_count: number; sighting_count: number }>(
-    `SELECT v.*,
+export async function activeVenues() {
+  return (
+    await all<Venue & { work_count: number; sighting_count: number }>(
+      `SELECT v.*,
             (SELECT COUNT(*) FROM displays d WHERE d.venue_id = v.id AND d.ended_on IS NULL) AS work_count,
             (SELECT COUNT(*) FROM sightings s WHERE s.venue_id = v.id) AS sighting_count
        FROM venues v
       ORDER BY work_count DESC, v.name`,
+    )
   ).filter((venue) => venue.work_count > 0);
 }
 
-export function venueBySlug(slug: string) {
-  return get<Venue>("SELECT * FROM venues WHERE slug = ?", slug);
+export async function venueBySlug(slug: string) {
+  return await get<Venue>("SELECT * FROM venues WHERE slug = ?", slug);
 }
 
-export function venueById(id: number) {
-  return get<Venue>("SELECT * FROM venues WHERE id = ?", id);
+export async function venueById(id: number) {
+  return await get<Venue>("SELECT * FROM venues WHERE id = ?", id);
 }
 
-export function galleriesAt(venueId: number) {
-  return all<{ location_label: string; n: number }>(
+export async function galleriesAt(venueId: number) {
+  return await all<{ location_label: string; n: number }>(
     `SELECT location_label, COUNT(*) AS n
        FROM displays
       WHERE venue_id = ? AND ended_on IS NULL AND location_label IS NOT NULL
@@ -44,8 +50,8 @@ export function galleriesAt(venueId: number) {
   );
 }
 
-export function topRatedAtVenue(venueId: number, limit = 12) {
-  return all<{
+export async function topRatedAtVenue(venueId: number, limit = 12) {
+  return await all<{
     id: number;
     slug: string;
     title: string;
@@ -61,7 +67,7 @@ export function topRatedAtVenue(venueId: number, limit = 12) {
        JOIN works w ON w.id = s.work_id
       WHERE s.venue_id = ? AND s.rating IS NOT NULL AND s.is_private = 0
       GROUP BY w.id
-     HAVING n >= 2
+     HAVING COUNT(s.rating) >= 2
       ORDER BY avg_rating DESC, n DESC
       LIMIT ?`,
     venueId,
@@ -69,8 +75,8 @@ export function topRatedAtVenue(venueId: number, limit = 12) {
   );
 }
 
-export function exhibitionsAt(venueId: number) {
-  return all<{
+export async function exhibitionsAt(venueId: number) {
+  return await all<{
     id: number;
     slug: string;
     title: string;
@@ -111,12 +117,12 @@ const EXHIBITION_COLUMNS = `
  * Dated runs first, closing soonest — "see it before it goes" is the useful
  * ordering — and the permanent ongoing installations after.
  */
-export function currentExhibitions(limit = 10): ExhibitionRow[] {
-  return all<ExhibitionRow>(
+export async function currentExhibitions(limit = 10): Promise<ExhibitionRow[]> {
+  return await all<ExhibitionRow>(
     `SELECT ${EXHIBITION_COLUMNS}
        FROM exhibitions e JOIN venues v ON v.id = e.venue_id
-      WHERE (e.starts_on IS NULL OR e.starts_on <= date('now'))
-        AND (e.ends_on IS NULL OR e.ends_on >= date('now'))
+      WHERE (e.starts_on IS NULL OR e.starts_on <= ${TODAY})
+        AND (e.ends_on IS NULL OR e.ends_on >= ${TODAY})
       ORDER BY e.ends_on IS NULL, e.ends_on, e.title LIMIT ?`,
     limit,
   );
@@ -127,41 +133,41 @@ export function currentExhibitions(limit = 10): ExhibitionRow[] {
  * Only currently-open shows: a sighting logged today cannot have happened at a
  * show that has closed or not yet opened.
  */
-export function openExhibitionsAt(venueId: number): { id: number; title: string }[] {
-  return all<{ id: number; title: string }>(
+export async function openExhibitionsAt(venueId: number): Promise<{ id: number; title: string }[]> {
+  return await all<{ id: number; title: string }>(
     `SELECT e.id, e.title FROM exhibitions e
       WHERE e.venue_id = ?
-        AND (e.starts_on IS NULL OR e.starts_on <= date('now'))
-        AND (e.ends_on IS NULL OR e.ends_on >= date('now'))
+        AND (e.starts_on IS NULL OR e.starts_on <= ${TODAY})
+        AND (e.ends_on IS NULL OR e.ends_on >= ${TODAY})
       ORDER BY e.starts_on IS NULL, e.starts_on DESC, e.title`,
     venueId,
   );
 }
 
 /** Announced but not yet open, soonest first. */
-export function upcomingExhibitions(limit = 10): ExhibitionRow[] {
-  return all<ExhibitionRow>(
+export async function upcomingExhibitions(limit = 10): Promise<ExhibitionRow[]> {
+  return await all<ExhibitionRow>(
     `SELECT ${EXHIBITION_COLUMNS}
        FROM exhibitions e JOIN venues v ON v.id = e.venue_id
-      WHERE e.starts_on IS NOT NULL AND e.starts_on > date('now')
+      WHERE e.starts_on IS NOT NULL AND e.starts_on > ${TODAY}
       ORDER BY e.starts_on, e.title LIMIT ?`,
     limit,
   );
 }
 
 /** Ended, most recently closed first — the archive of shows people logged. */
-export function pastExhibitions(limit = 30): ExhibitionRow[] {
-  return all<ExhibitionRow>(
+export async function pastExhibitions(limit = 30): Promise<ExhibitionRow[]> {
+  return await all<ExhibitionRow>(
     `SELECT ${EXHIBITION_COLUMNS}
        FROM exhibitions e JOIN venues v ON v.id = e.venue_id
-      WHERE e.ends_on IS NOT NULL AND e.ends_on < date('now')
+      WHERE e.ends_on IS NOT NULL AND e.ends_on < ${TODAY}
       ORDER BY e.ends_on DESC, e.title LIMIT ?`,
     limit,
   );
 }
 
-export function exhibitionBySlug(slug: string) {
-  return get<{
+export async function exhibitionBySlug(slug: string) {
+  return await get<{
     id: number;
     slug: string;
     venue_id: number;
@@ -192,8 +198,8 @@ export function exhibitionBySlug(slug: string) {
  * the same bet the display table makes (§10.3): where the institution is
  * silent, the visitors are the record.
  */
-export function exhibitionWorks(exhibitionId: number) {
-  return all<{
+export async function exhibitionWorks(exhibitionId: number) {
+  return await all<{
     id: number;
     slug: string;
     title: string;
@@ -225,24 +231,24 @@ export function exhibitionWorks(exhibitionId: number) {
 }
 
 /** Roll-up for an exhibition page: how many people, how many works, how rated. */
-export function exhibitionSummary(exhibitionId: number) {
-  return get<{ visitors: number; sightings: number; works_seen: number; avg_rating: number | null }>(
+export async function exhibitionSummary(exhibitionId: number) {
+  return (await get<{ visitors: number; sightings: number; works_seen: number; avg_rating: number | null }>(
     `SELECT COUNT(DISTINCT user_id) AS visitors,
             COUNT(*) AS sightings,
             COUNT(DISTINCT work_id) AS works_seen,
             AVG(rating) / 2.0 AS avg_rating
        FROM sightings WHERE exhibition_id = ? AND is_private = 0`,
     exhibitionId,
-  )!;
+  ))!;
 }
 
 /**
  * What is on the wall at this venue right now, best-attested first.
  * Institutional assertions outrank crowd ones (§10.3).
  */
-export function onViewAt(venueId: number, options: { limit?: number; offset?: number } = {}) {
+export async function onViewAt(venueId: number, options: { limit?: number; offset?: number } = {}) {
   const { limit = 40, offset = 0 } = options;
-  return all<{
+  return await all<{
     id: number;
     slug: string;
     title: string;

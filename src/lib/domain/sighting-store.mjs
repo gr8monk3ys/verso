@@ -6,10 +6,14 @@
  * bundler or a running server. The TypeScript layer in sightings.ts is a thin
  * typed wrapper over these functions.
  *
- * Every function takes an open libsql database handle.
+ * Every function takes an open database handle (the async Postgres adapter) and
+ * is itself async.
  */
 
 import { assertDisplay } from "./display.mjs";
+
+/** Postgres equivalent of SQLite's datetime('now') — UTC, 'YYYY-MM-DD HH:MM:SS'. */
+const NOW = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')";
 
 /** Tags are lowercase, hyphenated, and short. `Close Looking` → `close-looking`. */
 export function normalizeTag(tag) {
@@ -21,17 +25,17 @@ export function normalizeTag(tag) {
     .slice(0, 32);
 }
 
-export function setTags(db, sightingId, tags) {
-  db.prepare("DELETE FROM sighting_tags WHERE sighting_id = ?").run(sightingId);
+export async function setTags(db, sightingId, tags) {
+  await db.prepare("DELETE FROM sighting_tags WHERE sighting_id = ?").run(sightingId);
   const insert = db.prepare(
-    "INSERT OR IGNORE INTO sighting_tags (sighting_id, tag) VALUES (?, ?)",
+    "INSERT INTO sighting_tags (sighting_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING",
   );
   const seen = new Set();
   for (const raw of tags ?? []) {
     const tag = normalizeTag(raw);
     if (!tag || seen.has(tag)) continue;
     seen.add(tag);
-    insert.run(sightingId, tag);
+    await insert.run(sightingId, tag);
   }
 }
 
@@ -56,20 +60,19 @@ export function setTags(db, sightingId, tags) {
  * it: refusing meant a stranger's insert became a fact about yours, which let
  * anyone who learned a queued uuid pre-insert it and block that sync forever.
  */
-export function createSighting(db, input) {
+export async function createSighting(db, input) {
   if (input.clientUuid) {
-    const existing = db
+    const existing = await db
       .prepare("SELECT * FROM sightings WHERE client_uuid = ? AND user_id = ?")
       .get(input.clientUuid, input.userId);
     if (existing) {
       const rating = input.rating ?? existing.rating;
       const review = (input.review ?? "").trim() || existing.review;
       if (rating !== existing.rating || review !== existing.review) {
-        db.prepare(
-          `UPDATE sightings SET rating = ?, review = ?, updated_at = datetime('now')
-            WHERE id = ?`,
-        ).run(rating, review, existing.id);
-        if (input.tags?.length) setTags(db, existing.id, input.tags);
+        await db
+          .prepare(`UPDATE sightings SET rating = ?, review = ?, updated_at = ${NOW} WHERE id = ?`)
+          .run(rating, review, existing.id);
+        if (input.tags?.length) await setTags(db, existing.id, input.tags);
         return db.prepare("SELECT * FROM sightings WHERE id = ?").get(existing.id);
       }
       return existing;
@@ -80,14 +83,14 @@ export function createSighting(db, input) {
   const precision = input.datePrecision ?? (seenOn ? "day" : "unknown");
   const encounter = input.encounter ?? "original";
 
-  const result = db
+  const created = await db
     .prepare(
       `INSERT INTO sightings (client_uuid, user_id, work_id, venue_id, exhibition_id,
                               seen_on, date_precision, rating, review, private_note,
                               photo_path, source, encounter, is_private)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
     )
-    .run(
+    .get(
       input.clientUuid ?? null,
       input.userId,
       input.workId,
@@ -104,28 +107,25 @@ export function createSighting(db, input) {
       input.isPrivate ? 1 : 0,
     );
 
-  const id = Number(result.lastInsertRowid);
-  setTags(db, id, input.tags ?? []);
+  const id = created.id;
+  await setTags(db, id, input.tags ?? []);
 
   // A sighting of the original is evidence about where the work is. A sighting
   // of a reproduction is evidence about nothing (R2).
   if (encounter === "original" && input.venueId && seenOn) {
     const hadOpenDisplay = Boolean(
-      db
-        .prepare(
-          `SELECT 1 FROM displays
-            WHERE work_id = ? AND venue_id = ? AND ended_on IS NULL`,
-        )
+      await db
+        .prepare("SELECT 1 FROM displays WHERE work_id = ? AND venue_id = ? AND ended_on IS NULL")
         .get(input.workId, input.venueId),
     );
-    assertDisplay(db, {
+    await assertDisplay(db, {
       workId: input.workId,
       venueId: input.venueId,
       seenOn,
       exhibitionId: input.exhibitionId ?? null,
     });
     if (!hadOpenDisplay) {
-      notifyWatchers(db, input.workId, input.venueId, input.userId);
+      await notifyWatchers(db, input.workId, input.venueId, input.userId);
     }
   }
 
@@ -139,8 +139,8 @@ export function createSighting(db, input) {
  * readable one enumerable URL below the closed door on the profile page.
  * Returns null when the sighting does not exist.
  */
-export function sightingVisibility(db, sightingId) {
-  const row = db
+export async function sightingVisibility(db, sightingId) {
+  const row = await db
     .prepare(
       `SELECT s.user_id, s.is_private, u.is_private AS owner_private
          FROM sightings s JOIN users u ON u.id = s.user_id
@@ -197,30 +197,32 @@ export function sightingPatchFromForm(formData) {
  * Update a sighting the caller owns. Fields left undefined in the patch keep
  * their stored value — that contract is what sightingPatchFromForm leans on.
  */
-export function updateSighting(db, id, userId, patch) {
-  const existing = db
+export async function updateSighting(db, id, userId, patch) {
+  const existing = await db
     .prepare("SELECT * FROM sightings WHERE id = ? AND user_id = ?")
     .get(id, userId);
   if (!existing) return undefined;
 
-  db.prepare(
-    `UPDATE sightings
-        SET rating = ?, review = ?, private_note = ?, seen_on = ?, date_precision = ?,
-            is_private = ?, updated_at = datetime('now')
-      WHERE id = ? AND user_id = ?`,
-  ).run(
-    patch.rating === undefined ? existing.rating : patch.rating,
-    patch.review === undefined ? existing.review : (patch.review ?? "").trim() || null,
-    patch.privateNote === undefined
-      ? existing.private_note
-      : (patch.privateNote ?? "").trim() || null,
-    patch.seenOn === undefined ? existing.seen_on : patch.seenOn,
-    patch.datePrecision ?? existing.date_precision,
-    patch.isPrivate === undefined ? existing.is_private : patch.isPrivate ? 1 : 0,
-    id,
-    userId,
-  );
-  if (patch.tags) setTags(db, id, patch.tags);
+  await db
+    .prepare(
+      `UPDATE sightings
+          SET rating = ?, review = ?, private_note = ?, seen_on = ?, date_precision = ?,
+              is_private = ?, updated_at = ${NOW}
+        WHERE id = ? AND user_id = ?`,
+    )
+    .run(
+      patch.rating === undefined ? existing.rating : patch.rating,
+      patch.review === undefined ? existing.review : (patch.review ?? "").trim() || null,
+      patch.privateNote === undefined
+        ? existing.private_note
+        : (patch.privateNote ?? "").trim() || null,
+      patch.seenOn === undefined ? existing.seen_on : patch.seenOn,
+      patch.datePrecision ?? existing.date_precision,
+      patch.isPrivate === undefined ? existing.is_private : patch.isPrivate ? 1 : 0,
+      id,
+      userId,
+    );
+  if (patch.tags) await setTags(db, id, patch.tags);
   return db.prepare("SELECT * FROM sightings WHERE id = ?").get(id);
 }
 
@@ -230,12 +232,12 @@ export function updateSighting(db, id, userId, patch) {
  * Near you is the launch city, not a radius: the point of §4's single-city bet
  * is that everyone in the graph shares a catalogue.
  */
-export function notifyWatchers(db, workId, venueId, actorId) {
-  const work = db.prepare("SELECT title, slug FROM works WHERE id = ?").get(workId);
-  const venue = db.prepare("SELECT name, city FROM venues WHERE id = ?").get(venueId);
+export async function notifyWatchers(db, workId, venueId, actorId) {
+  const work = await db.prepare("SELECT title, slug FROM works WHERE id = ?").get(workId);
+  const venue = await db.prepare("SELECT name, city FROM venues WHERE id = ?").get(venueId);
   if (!work || !venue) return 0;
 
-  const watchers = db
+  const watchers = await db
     .prepare(
       `SELECT w.user_id FROM watchlist w
          JOIN users u ON u.id = w.user_id
@@ -249,7 +251,7 @@ export function notifyWatchers(db, workId, venueId, actorId) {
      VALUES (?, 'watchlist_on_display', ?, ?)`,
   );
   for (const watcher of watchers) {
-    insert.run(
+    await insert.run(
       watcher.user_id,
       `${work.title} is on display at ${venue.name}.`,
       `/work/${work.slug}`,

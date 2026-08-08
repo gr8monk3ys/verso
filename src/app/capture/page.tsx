@@ -10,7 +10,7 @@ export default async function CapturePage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const venues = activeVenues().map((venue) => ({
+  const venues = (await activeVenues()).map((venue) => ({
     id: venue.id,
     slug: venue.slug,
     name: venue.name,

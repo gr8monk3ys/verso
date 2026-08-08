@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const blocked = blockedByUser(db(), user.id) as {
+  const blocked = (await blockedByUser(await db(), user.id)) as {
     id: number;
     handle: string;
     display_name: string;

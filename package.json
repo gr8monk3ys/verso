@@ -34,8 +34,9 @@
     "verify": "npm run check && npm run db:reset && npm run db:seed && npm run db:demo && npm run metrics"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@neondatabase/serverless": "^1.1.0",
     "@vercel/blob": "^2.7.0",
-    "libsql": "^0.5.29",
     "next": "^15.5.21",
     "react": "19.1.1",
     "react-dom": "19.1.1",

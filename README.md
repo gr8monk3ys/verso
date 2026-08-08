@@ -13,7 +13,7 @@ capture, a social layer, and the metric gates that decide whether the whole idea
 is working.
 
 ```bash
-# Node 24+ (Vercel's default; the libsql driver is a native addon, no flags)
+# Node 24+ (Vercel's default; PGlite is WASM, no native addon, no flags)
 git clone https://github.com/gr8monk3ys/verso && cd verso
 npm install
 npm run db:reset && npm run db:seed && npm run db:demo
@@ -89,7 +89,7 @@ than assuming it — see [Metrics](#metrics).
 - Wikidata reconciliation with a human review queue
 - Crowdsourced "on view" inference — sightings become display evidence
 - Live metric gates, and a catalogue guardrail measured against real ground truth
-- CSP with per-request nonces, hourly backups with a rehearsed restore, and a
+- CSP with per-request nonces, managed backups on serverless (Neon's job), and a
   preflight check that refuses to call an unready deployment ready
 - Institutional analytics under a k-anonymity floor
 
@@ -206,10 +206,11 @@ Colours, type, logo variants and the Open Graph card system:
 
 ## Architecture
 
-Next.js 15 (App Router) · React 19 · TypeScript · Tailwind 4 · SQLite via
-`libsql` — one synchronous query layer that runs against a **local file** on a
-box or a **remote Turso** database on serverless, no async rewrite between them.
-No ORM, no build step for the scripts. See `ops/DEPLOY.md` for the three shapes.
+Next.js 15 (App Router) · React 19 · TypeScript · Tailwind 4 · Postgres via
+`@electric-sql/pglite` on a box and `@neondatabase/serverless` on serverless —
+one query layer that runs against a **local PGlite store** on a box or a
+**managed Neon** database on serverless, no rewrite between them. No ORM, no
+build step for the scripts. See `ops/DEPLOY.md` for the three shapes.
 
 ```
 src/lib/db/schema.sql        the object model
@@ -256,15 +257,15 @@ measurement rather than a claim.
 
 ## Deployment
 
-Three shapes, one codebase — systemd, container, or Vercel + Turso. The full
+Three shapes, one codebase — systemd, container, or Vercel + Neon. The full
 sequence for each is in [`ops/DEPLOY.md`](ops/DEPLOY.md); the serverless path
-sets `VERSO_DATABASE_URL` to a Turso database and photos go to Vercel Blob,
+sets `DATABASE_URL` to a Neon database and photos go to Vercel Blob,
 with no change to the query layer. For a systemd host,
 `ops/verso.service.example` is the app unit and `ops/verso.env.example`
 enumerates every variable below in one copy-editable file. By hand:
 
 ```bash
-VERSO_DB_PATH=/var/lib/verso/verso.db \
+VERSO_PGLITE_PATH=/var/lib/verso/pgdata \
 VERSO_MEDIA_DIR=/var/lib/verso/media \
 VERSO_BASE_URL=https://verso.example \
 VERSO_STAFF_BOOTSTRAP=your-handle \
@@ -291,9 +292,8 @@ Verso preflight · NODE_ENV=production
 
 | Variable | Purpose |
 |---|---|
-| `VERSO_DATABASE_URL` | Remote Turso database (`libsql://…`) for serverless; unset → local file |
-| `VERSO_DATABASE_AUTH_TOKEN` | Turso token, paired with the URL above |
-| `VERSO_DB_PATH` | Local SQLite file when no URL is set (default `data/verso.db`) |
+| `DATABASE_URL` | Managed Postgres connection string (`postgres://…`) for serverless — Neon embeds credentials, so there is no separate token; unset → local PGlite store |
+| `VERSO_PGLITE_PATH` | Local PGlite store — a directory, not a file — when no `DATABASE_URL` is set (default `data/pgdata`) |
 | `VERSO_MEDIA_DIR` | Uploaded sighting photos on disk; Vercel Blob replaces it when `BLOB_READ_WRITE_TOKEN` is present |
 | `VERSO_BASE_URL` | Absolute origin — used in sitemaps, share cards, reset links |
 | `VERSO_STAFF_BOOTSTRAP` | Handle promoted to staff on boot; the only way to reach `/internal` on a fresh deploy |
@@ -310,33 +310,20 @@ Verso preflight · NODE_ENV=production
 The catalogue rebuilds from The Met in fifteen seconds. The sightings, and the
 on-view record derived from them, rebuild from nothing.
 
-```bash
-npm run backup          # VACUUM INTO snapshot + photos + checksummed manifest
-npm run backup:verify   # re-checksum the newest one
-npm run backup:drill    # restore it somewhere harmless and check the row counts
-```
+**On serverless, backups are Neon's job.** Neon takes managed backups and offers
+point-in-time restore, so the sightings on a Vercel + Neon deploy are covered by
+the database provider rather than by anything Verso runs.
 
-`VACUUM INTO` rather than copying the file: under WAL a `cp` of `verso.db` can
-catch a torn state with committed transactions still in the `-wal`. Snapshots
-carry row counts and a SHA-256, and `restore` refuses a snapshot whose checksum
-does not match rather than overwriting a working database with a broken one.
-
-Hourly, with the offsite copy that makes it a backup rather than a second copy on
-the same failing disk:
-
-```
-0 * * * * cd /srv/verso && VERSO_BACKUP_HOOK=/srv/verso/offsite.sh node scripts/backup.mjs
-```
-
-**Run `npm run backup:drill` on a schedule too.** A backup nobody has restored is
-a rumour.
+**On one box, the backup subsystem is pending a Postgres port.** The
+`npm run backup` / `backup:verify` / `backup:drill` scripts still speak SQLite
+(`VACUUM INTO`, `PRAGMA integrity_check`) and have not yet been ported to a
+`pg_dump` of the PGlite store or a local Postgres server. Until they are, a
+one-box deploy has no rehearsed backup path — treat `data/` (the PGlite store
+and the media) as the thing to copy offsite by hand, and see
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 `/api/health` returns 200 with the catalogue size, or 503 when the database is
 unreachable — point the load balancer at that rather than at `/`.
-
-**Back up `data/`.** The catalogue can be rebuilt from The Met in fifteen
-seconds; the sightings cannot be rebuilt from anything. WAL mode means
-`sqlite3 verso.db ".backup ..."` rather than a file copy.
 
 ---
 
@@ -344,8 +331,8 @@ seconds; the sightings cannot be rebuilt from anything. WAL mode means
 
 Honestly, and in one place: [`docs/ROADMAP.md`](docs/ROADMAP.md). The headlines
 are no native apps, no Content-Security-Policy, no real recognition model, no
-email beyond password reset, exhibitions are demo data, and SQLite is right for
-this scale and wrong for a real launch.
+email beyond password reset, exhibitions are demo data, and the one-box backup
+scripts still need porting from SQLite to `pg_dump`.
 
 ---
 

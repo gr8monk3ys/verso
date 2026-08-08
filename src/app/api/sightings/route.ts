@@ -47,13 +47,13 @@ export async function POST(request: Request) {
     // Idempotency is per (user, uuid) — enforced by the schema itself, so a
     // uuid another account happens to hold is simply their own key, not a
     // reason to reject this one.
-    const sighting = createSighting({ ...parsed, userId: user.id });
+    const sighting = await createSighting({ ...parsed, userId: user.id });
     created.push({ clientUuid, id: sighting.id });
 
     const recognition = (item as { recognition?: { rank?: number | null; topWorkId?: number | null; score?: number | null } })
       ?.recognition;
     if (recognition && recognition.rank != null) {
-      recordRecognition({
+      await recordRecognition({
         userId: user.id,
         venueId: parsed.venueId ?? null,
         topWorkId: recognition.topWorkId ?? null,

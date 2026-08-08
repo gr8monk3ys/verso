@@ -41,9 +41,9 @@ function loadCatalogueEval() {
   };
 }
 
-const db = openDb();
+const db = await openDb();
 const catalogueEval = loadCatalogueEval();
-const metrics = computeMetrics(db, { windowDays, catalogueEval });
+const metrics = await computeMetrics(db, { windowDays, catalogueEval });
 /**
  * Whether these numbers describe people or a generator.
  *
@@ -54,8 +54,8 @@ const metrics = computeMetrics(db, { windowDays, catalogueEval });
  * not the product. A bare "V0 PASS" hides that, so it gets said out loud.
  */
 const synthetic =
-  db.prepare("SELECT value FROM meta WHERE key = 'dataset'").get()?.value === "demo";
-db.close();
+  (await db.prepare("SELECT value FROM meta WHERE key = 'dataset'").get())?.value === "demo";
+await db.close();
 
 if (json) {
   console.log(JSON.stringify({ ...metrics, dataset: synthetic ? "demo" : "live" }, null, 2));

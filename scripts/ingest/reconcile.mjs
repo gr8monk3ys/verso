@@ -24,6 +24,9 @@ import {
   rejectCandidate,
 } from "../../src/lib/domain/reconciliation.mjs";
 
+/** Postgres equivalent of SQLite's datetime('now') — UTC, 'YYYY-MM-DD HH:MM:SS'. */
+const NOW = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')";
+
 function parseArgs(argv) {
   const args = { limit: 500, collection: "Q160236" };
   for (let i = 2; i < argv.length; i++) {
@@ -41,8 +44,8 @@ function parseArgs(argv) {
 }
 
 /** Pull the identifiers a work is already known by, for accession matching. */
-function accessionFor(db, workId) {
-  const row = db
+async function accessionFor(db, workId) {
+  const row = await db
     .prepare(
       `SELECT value FROM work_identifiers
         WHERE work_id = ? AND scheme IN ('met_accession', 'aic_accession')
@@ -53,7 +56,7 @@ function accessionFor(db, workId) {
 }
 
 export async function reconcileWorks(db, provider, { limit = 500, dryRun = false } = {}) {
-  const pending = db
+  const pending = await db
     .prepare(
       `SELECT id, title, artist_display, date_begin
          FROM works
@@ -67,11 +70,11 @@ export async function reconcileWorks(db, provider, { limit = 500, dryRun = false
 
   const setMatched = db.prepare(
     `UPDATE works SET wikidata_qid = ?, catalogue_status = 'matched',
-                      updated_at = datetime('now')
+                      updated_at = ${NOW}
       WHERE id = ?`,
   );
   const addIdentifier = db.prepare(
-    "INSERT OR IGNORE INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', ?)",
+    "INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', ?) ON CONFLICT DO NOTHING",
   );
   const queueCandidate = db.prepare(
     `INSERT INTO reconciliation_candidates (work_id, qid, score, method, evidence)
@@ -87,7 +90,7 @@ export async function reconcileWorks(db, provider, { limit = 500, dryRun = false
       title: work.title,
       artist: work.artist_display,
       year: work.date_begin,
-      accession: accessionFor(db, work.id),
+      accession: await accessionFor(db, work.id),
     };
 
     let candidates;
@@ -118,8 +121,8 @@ export async function reconcileWorks(db, provider, { limit = 500, dryRun = false
 
     if (best.score >= AUTO_ACCEPT && !ambiguous) {
       if (!dryRun) {
-        setMatched.run(best.candidate.qid, work.id);
-        addIdentifier.run(work.id, best.candidate.qid);
+        await setMatched.run(best.candidate.qid, work.id);
+        await addIdentifier.run(work.id, best.candidate.qid);
       }
       stats.accepted++;
       continue;
@@ -127,12 +130,12 @@ export async function reconcileWorks(db, provider, { limit = 500, dryRun = false
 
     if (!dryRun) {
       for (const entry of scored.slice(0, 3)) {
-        queueCandidate.run(
+        await queueCandidate.run(
           work.id, entry.candidate.qid, entry.score, entry.method,
           `${entry.evidence}${ambiguous ? " · ambiguous: near-tied candidates" : ""}`,
         );
       }
-      if (ambiguous) markConflicted.run(work.id);
+      if (ambiguous) await markConflicted.run(work.id);
     }
     stats.queued++;
     if (ambiguous) stats.conflicted++;
@@ -141,8 +144,8 @@ export async function reconcileWorks(db, provider, { limit = 500, dryRun = false
   return stats;
 }
 
-function showQueue(db) {
-  const rows = db
+async function showQueue(db) {
+  const rows = await db
     .prepare(
       `SELECT c.id, c.qid, c.score, c.method, c.evidence,
               w.title, w.artist_display, w.date_display
@@ -170,15 +173,15 @@ function showQueue(db) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  const db = openDb();
+  const db = await openDb();
 
   if (args.queue) {
-    showQueue(db);
+    await showQueue(db);
   } else if (args.accept) {
-    const candidate = acceptCandidate(db, args.accept);
+    const candidate = await acceptCandidate(db, args.accept);
     console.log(`accepted ${candidate.qid} for work ${candidate.work_id}`);
   } else if (args.reject) {
-    rejectCandidate(db, args.reject);
+    await rejectCandidate(db, args.reject);
     console.log(`rejected candidate ${args.reject}`);
   } else {
     const provider = args.fixture
@@ -196,7 +199,7 @@ async function main() {
     );
   }
 
-  db.close();
+  await db.close();
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

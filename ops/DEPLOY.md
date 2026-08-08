@@ -4,14 +4,18 @@ Three supported shapes, same app and same gate: **`npm run preflight` must
 pass on the production host before you point strangers at it.** Preflight
 knows which shape it is running in and checks accordingly.
 
-The database driver is `libsql`, which speaks the same synchronous API whether
-it is a **local file** (shapes 1–2) or a **remote Turso database** (shape 3).
-One environment variable decides:
+The database is Postgres everywhere. Local dev and the one-box shapes use
+`@electric-sql/pglite` (an in-process Postgres, WASM — no native addon); the
+serverless shape uses `@neondatabase/serverless` against a managed Neon
+database. One environment variable decides:
 
-- `VERSO_DATABASE_URL` unset → local file at `VERSO_DB_PATH`. The one-box shapes.
-- `VERSO_DATABASE_URL=libsql://…turso.io` (+ `VERSO_DATABASE_AUTH_TOKEN`) → remote.
-  The serverless shape. **Required on Vercel** — a local file there is ephemeral
-  and per-instance, and preflight fails the deploy if it sees that combination.
+- `DATABASE_URL` unset → a local PGlite store at `VERSO_PGLITE_PATH` (a
+  directory, not a file). The one-box shapes. A local Postgres server works too:
+  set `DATABASE_URL=postgres://localhost/verso` instead.
+- `DATABASE_URL=postgres://…@…neon.tech/…` → managed Neon. The serverless shape.
+  **Required on Vercel** — a local store there is ephemeral and per-instance, and
+  preflight fails the deploy if it sees that combination. Neon's connection
+  string carries its own credentials, so there is no separate auth token.
 
 The operator-supplied blockers, common to every shape:
 
@@ -20,7 +24,7 @@ The operator-supplied blockers, common to every shape:
 | mail | `VERSO_MAIL=webhook` + `VERSO_MAIL_WEBHOOK` (+ token/from). Resend's `/emails` is the native contract |
 | base url | `VERSO_BASE_URL=https://…` — https, not http |
 | dataset | seed the production database *without* `db:demo` |
-| backups | one-box: `VERSO_BACKUP_HOOK` + scheduled `npm run backup`. Turso: the managed database has its own backups |
+| backups | serverless: Neon provides managed backups + point-in-time restore. one-box: no rehearsed path yet — the backup scripts are pending a `pg_dump` port (see below) |
 
 Plus one warning worth clearing: `VERSO_STAFF_BOOTSTRAP=<your handle>`,
 without which `/internal` is unreachable on a fresh deploy.
@@ -51,21 +55,21 @@ Reverse proxy: terminate TLS in whatever already fronts the host and forward
 to `:3000`. Verso sets its own CSP with per-request nonces; don't let the
 proxy inject headers over it.
 
-## Shape 3 — Vercel + Turso (serverless)
+## Shape 3 — Vercel + Neon (serverless)
 
 The app runs on Vercel Functions with no filesystem: the database is a managed
-Turso database and photos are Vercel Blob. No code path changes — `libsql`
-keeps the synchronous API, it just talks to a server instead of a file.
+Neon (Postgres) database and photos are Vercel Blob. No code path changes — the
+query layer talks to Neon over the wire instead of to a local PGlite store.
 
 ```bash
-# 1. Database — a Turso database, seeded from your machine over the network.
-turso db create verso
-turso db show verso --url                 # → libsql://verso-<org>.turso.io
-turso db tokens create verso              # → the auth token
+# 1. Database — a Neon Postgres database, seeded from your machine over the
+#    network. Create a project at neon.tech (or `neonctl projects create`) and
+#    copy its connection string from the console:
+#      postgres://<user>:<password>@<host>.neon.tech/<db>?sslmode=require
+#    Neon embeds the credentials in the string — there is no separate token.
 
 # Seed it (runs locally, writes to the remote DB; NOT db:demo):
-VERSO_DATABASE_URL=libsql://verso-<org>.turso.io \
-VERSO_DATABASE_AUTH_TOKEN=<token> \
+DATABASE_URL=postgres://<user>:<password>@<host>.neon.tech/<db>?sslmode=require \
   npm run db:seed                         # venues, catalogue, artists, exhibitions
 
 # 2. Photos — a Blob store attached to the Vercel project sets
@@ -73,8 +77,7 @@ VERSO_DATABASE_AUTH_TOKEN=<token> \
 vercel blob store add verso-photos
 
 # 3. Environment (Production) — everything preflight wants:
-vercel env add VERSO_DATABASE_URL production        # libsql://…
-vercel env add VERSO_DATABASE_AUTH_TOKEN production  # the token
+vercel env add DATABASE_URL production               # postgres://…@…neon.tech/…
 vercel env add VERSO_BASE_URL production             # https://your-domain
 vercel env add VERSO_MAIL production                 # webhook
 vercel env add VERSO_MAIL_WEBHOOK production          # https://api.resend.com/emails
@@ -88,20 +91,26 @@ vercel --prod
 
 Verify before announcing: `curl https://your-domain/` renders the catalogue,
 sign up an account, log a work with a photo, sign out, and confirm the photo
-still loads (that exercises Turso writes, Blob, and the authorising media
+still loads (that exercises Neon writes, Blob, and the authorising media
 route in one pass). `preflight` runs in CI, not on Vercel — the checks above
 are the deploy's own gate.
 
 Two things a managed database changes from the one-box shapes: `db:reset`
-refuses to run against a remote URL (use the Turso CLI), and foreign-key
-cascades depend on the server enforcing them — Turso does by default, but
-confirm a deleted account takes its sightings with it as a launch check.
+refuses to run against a remote `DATABASE_URL` (reset from the Neon console
+instead), and foreign-key cascades depend on the server enforcing them —
+Postgres enforces them natively, but confirm a deleted account takes its
+sightings with it as a launch check.
 
-## Backups are not optional (one-box shapes)
+## Backups
 
-SQLite on one box is a responsible choice *only* with the offsite copy the
-backup timer provides (README: Deployment). `scripts/backup.mjs` produces
-the artifact; `VERSO_BACKUP_HOOK` ships it somewhere that isn't this
-machine. Test a restore once before launch — a backup that has never been
-restored is a hope, not a backup. (Shape 3 delegates this to Turso's managed
-backups; the backup timer is for the local-file shapes.)
+**Serverless (Shape 3) delegates this to Neon**, which takes managed backups
+and offers point-in-time restore. Nothing to run.
+
+**One box (Shapes 1–2) has no rehearsed path yet.** The `scripts/backup.mjs` /
+`scripts/restore.mjs` tooling and the `ops/verso-backup.*` timer still speak
+SQLite (`VACUUM INTO`, `PRAGMA integrity_check`) and have not been ported to a
+`pg_dump` of the PGlite store or a local Postgres server. Until they are, copy
+`data/` (the PGlite store plus media) offsite by hand — the sightings and the
+on-view record derived from them rebuild from nothing, so this is not optional,
+only unautomated. Porting the backup subsystem to `pg_dump` is tracked in
+`docs/ROADMAP.md`.

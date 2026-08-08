@@ -44,7 +44,7 @@ async function* readNdjsonGz(filePath) {
   for await (const line of lines) if (line.trim()) yield JSON.parse(line);
 }
 
-function seedVenues(db) {
+async function seedVenues(db) {
   const venues = JSON.parse(readFileSync(VENUES, "utf8"));
   const insert = db.prepare(`
     INSERT INTO venues (slug, name, kind, city, country, lat, lon, url, wikidata_qid)
@@ -54,9 +54,9 @@ function seedVenues(db) {
       country = excluded.country, lat = excluded.lat, lon = excluded.lon,
       url = excluded.url, wikidata_qid = excluded.wikidata_qid
   `);
-  transact(db, () => {
+  await transact(db, async () => {
     for (const v of venues) {
-      insert.run(v.slug, v.name, v.kind, v.city, v.country, v.lat ?? null,
+      await insert.run(v.slug, v.name, v.kind, v.city, v.country, v.lat ?? null,
         v.lon ?? null, v.url ?? null, v.wikidata_qid ?? null);
     }
   });
@@ -78,7 +78,7 @@ async function seedCatalogue(db) {
   }
 
   const venueIds = new Map(
-    db.prepare("SELECT id, slug FROM venues").all().map((r) => [r.slug, r.id]),
+    (await db.prepare("SELECT id, slug FROM venues").all()).map((r) => [r.slug, r.id]),
   );
 
   const findBySource = db.prepare(
@@ -90,15 +90,15 @@ async function seedCatalogue(db) {
       medium, dimensions, classification, culture, credit_line, home_venue_id,
       wikidata_qid, artist_qid, artist_ulan, catalogue_status, is_public_domain,
       source_name, source_url, image_url, image_credit, image_licence
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id
   `);
   const insertIdentifier = db.prepare(
-    "INSERT OR IGNORE INTO work_identifiers (work_id, scheme, value) VALUES (?,?,?)",
+    "INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?,?,?) ON CONFLICT DO NOTHING",
   );
   const insertDisplay = db.prepare(`
     INSERT INTO displays (work_id, venue_id, location_label, started_on, source,
                           confidence, last_seen_on)
-    VALUES (?, ?, ?, NULL, 'institutional', 1.0, date('now'))
+    VALUES (?, ?, ?, NULL, 'institutional', 1.0, (now() AT TIME ZONE 'utc')::date)
   `);
   const slugTaken = db.prepare("SELECT 1 FROM works WHERE slug = ?");
 
@@ -116,15 +116,15 @@ async function seedCatalogue(db) {
     for await (const record of readNdjsonGz(file)) batch.push(record);
   }
 
-  transact(db, () => {
+  await transact(db, async () => {
     for (const record of batch) {
       const source = record.source ?? "met";
-      if (findBySource.get(idScheme(source), String(record.sourceId))) {
+      if (await findBySource.get(idScheme(source), String(record.sourceId))) {
         skipped++;
         continue;
       }
       let slug = slugify(`${record.title} ${artistTail(record.artistDisplay)}`);
-      if (slugTaken.get(slug)) slug = `${slug}-${record.sourceId}`;
+      if (await slugTaken.get(slug)) slug = `${slug}-${record.sourceId}`;
 
       // Reconciliation status: the Met supplies the Q-number itself for most
       // objects, which is an institutional assertion, not a guess. Sources
@@ -132,7 +132,7 @@ async function seedCatalogue(db) {
       // scripts/ingest/reconcile.mjs.
       const status = record.wikidataQid ? "matched" : "unreconciled";
 
-      const result = insertWork.run(
+      const created = await insertWork.get(
         slug,
         record.title,
         record.artistDisplay || "",
@@ -157,13 +157,13 @@ async function seedCatalogue(db) {
         record.imageCredit ?? null,
         record.imageLicence ?? null,
       );
-      const workId = Number(result.lastInsertRowid);
-      insertIdentifier.run(workId, idScheme(source), String(record.sourceId));
+      const workId = created.id;
+      await insertIdentifier.run(workId, idScheme(source), String(record.sourceId));
       if (record.accession) {
-        insertIdentifier.run(workId, `${source}_accession`, record.accession);
+        await insertIdentifier.run(workId, `${source}_accession`, record.accession);
       }
-      if (record.wikidataQid) insertIdentifier.run(workId, "wikidata", record.wikidataQid);
-      if (record.artistUlan) insertIdentifier.run(workId, "ulan", record.artistUlan);
+      if (record.wikidataQid) await insertIdentifier.run(workId, "wikidata", record.wikidataQid);
+      if (record.artistUlan) await insertIdentifier.run(workId, "ulan", record.artistUlan);
 
       const venueId = venueIds.get(record.venueSlug);
       if (venueId && record.gallery) {
@@ -171,7 +171,7 @@ async function seedCatalogue(db) {
         const label = /^\d/.test(record.gallery)
           ? `Gallery ${record.gallery}`
           : record.gallery;
-        insertDisplay.run(workId, venueId, label);
+        await insertDisplay.run(workId, venueId, label);
         displays++;
       }
       inserted++;
@@ -183,32 +183,31 @@ async function seedCatalogue(db) {
 
 async function main() {
   if (command === "reset") {
-    // reset means "delete the file and start over" — a local-file operation.
-    // Refuse against a remote URL rather than dropping a Turso database from a
-    // one-word command; Turso has its own tooling for that, deliberately.
+    // reset means "delete the local store and start over" — a local-only
+    // operation. Refuse against a remote URL rather than dropping a Neon
+    // database from a one-word command; Neon has its own tooling for that.
+    // (Don't echo DB_PATH here — a postgres:// URL carries the password.)
     if (isRemoteUrl(DB_PATH)) {
       console.error(
-        `reset only works on a local database. VERSO_DATABASE_URL points at a remote server (${DB_PATH}); use the Turso CLI to reset it.`,
+        "reset only works on a local database. DATABASE_URL points at a remote Postgres server; use the Neon console or CLI to reset it.",
       );
       process.exit(1);
     }
-    for (const suffix of ["", "-wal", "-shm"]) {
-      const file = `${DB_PATH}${suffix}`;
-      if (existsSync(file)) rmSync(file);
-    }
-    openDb().close();
+    // PGlite persists to a directory (data/pgdata), not a single file.
+    if (existsSync(DB_PATH)) rmSync(DB_PATH, { recursive: true, force: true });
+    await (await openDb()).close();
     console.log(`reset ${DB_PATH}`);
     return;
   }
 
-  const db = openDb();
+  const db = await openDb();
 
   if (command === "migrate") {
     console.log(`schema applied to ${DB_PATH}`);
   } else if (command === "seed") {
-    const venues = seedVenues(db);
+    const venues = await seedVenues(db);
     const result = await seedCatalogue(db);
-    const total = db.prepare("SELECT COUNT(*) AS n FROM works").get().n;
+    const total = (await db.prepare("SELECT COUNT(*) AS n FROM works").get()).n;
     console.log(
       `venues ${venues} · works +${result.inserted} (skipped ${result.skipped}) · ` +
         `displays +${result.displays} · catalogue ${total}`,
@@ -223,13 +222,13 @@ async function main() {
     const dates = existsSync(datesPath)
       ? JSON.parse(readFileSync(datesPath, "utf8")).dates
       : {};
-    const artists = buildArtists(db, { dates });
+    const artists = await buildArtists(db, { dates });
     console.log(
       `artists ${artists.artists} across ${artists.works} works ` +
         `(${artists.joined} joined by name, ${artists.refused.length} contested names refused)`,
     );
 
-    const duplicates = flagDuplicateQids(db);
+    const duplicates = await flagDuplicateQids(db);
     if (duplicates.flagged) {
       console.log(
         `conflicted ${duplicates.flagged} works across ${duplicates.qids.length} ` +
@@ -240,7 +239,7 @@ async function main() {
     // Real exhibitions, from the museum's public listing (see the loader for
     // why this is a checked-in file rather than a scraper).
     if (existsSync(EXHIBITIONS)) {
-      const shows = loadExhibitions(db, JSON.parse(readFileSync(EXHIBITIONS, "utf8")));
+      const shows = await loadExhibitions(db, JSON.parse(readFileSync(EXHIBITIONS, "utf8")));
       console.log(
         `exhibitions +${shows.inserted} (updated ${shows.updated}` +
           (shows.skipped.length ? `, skipped ${shows.skipped.length}` : "") +
@@ -248,10 +247,14 @@ async function main() {
       );
     }
   } else if (command === "demo") {
-    const summary = seedDemo(db);
+    const summary = await seedDemo(db);
     // Mark the dataset as generated, so the metric gates can say so instead of
     // reporting a PASS that reads like evidence about real users.
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('dataset', 'demo')").run();
+    await db
+      .prepare(
+        "INSERT INTO meta (key, value) VALUES ('dataset', 'demo') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      )
+      .run();
     console.log(
       Object.entries(summary)
         .map(([key, value]) => `${key} ${value}`)
@@ -262,7 +265,7 @@ async function main() {
     process.exit(1);
   }
 
-  db.close();
+  await db.close();
 }
 
 main().catch((error) => {

@@ -1,24 +1,24 @@
-import Database from "libsql";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { applySchema } from "../src/lib/db/migrate.mjs";
+import { openDatabase } from "../src/lib/db/driver.mjs";
 
 const SCHEMA = readFileSync(path.join("src", "lib", "db", "schema.sql"), "utf8");
 
-/** A fresh in-memory database with the real schema, on the production driver. */
-export function testDb() {
-  const db = new Database(":memory:");
-  applySchema(db, SCHEMA);
+/** A fresh in-memory Postgres (PGlite) with the real schema, on the prod driver. */
+export async function testDb() {
+  const db = await openDatabase(":memory:");
+  await db.exec(SCHEMA);
   return db;
 }
 
-export function addUser(db, handle, extra = {}) {
-  const result = db
+export async function addUser(db, handle, extra = {}) {
+  const row = await db
     .prepare(
       `INSERT INTO users (handle, display_name, password_hash, home_city, is_private, created_at)
-       VALUES (?,?,?,?,?, COALESCE(?, datetime('now')))`,
+       VALUES (?,?,?,?,?, COALESCE(?, to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')))
+       RETURNING id`,
     )
-    .run(
+    .get(
       handle,
       extra.displayName ?? handle,
       "x",
@@ -26,26 +26,24 @@ export function addUser(db, handle, extra = {}) {
       extra.isPrivate ? 1 : 0,
       extra.createdAt ?? null,
     );
-  return Number(result.lastInsertRowid);
+  return row.id;
 }
 
-export function addVenue(db, slug, extra = {}) {
-  const result = db
-    .prepare(
-      "INSERT INTO venues (slug, name, city, country) VALUES (?,?,?,?)",
-    )
-    .run(slug, extra.name ?? slug, extra.city ?? "New York", extra.country ?? "United States");
-  return Number(result.lastInsertRowid);
+export async function addVenue(db, slug, extra = {}) {
+  const row = await db
+    .prepare("INSERT INTO venues (slug, name, city, country) VALUES (?,?,?,?) RETURNING id")
+    .get(slug, extra.name ?? slug, extra.city ?? "New York", extra.country ?? "United States");
+  return row.id;
 }
 
-export function addWork(db, slug, extra = {}) {
-  const result = db
+export async function addWork(db, slug, extra = {}) {
+  const row = await db
     .prepare(
       `INSERT INTO works (slug, title, artist_display, date_begin, home_venue_id, wikidata_qid,
                           catalogue_status)
-       VALUES (?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?) RETURNING id`,
     )
-    .run(
+    .get(
       slug,
       extra.title ?? slug,
       extra.artist ?? "",
@@ -54,11 +52,11 @@ export function addWork(db, slug, extra = {}) {
       extra.qid ?? null,
       extra.status ?? "unreconciled",
     );
-  const id = Number(result.lastInsertRowid);
+  const id = row.id;
   if (extra.accession) {
-    db.prepare(
-      "INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?, 'met_accession', ?)",
-    ).run(id, extra.accession);
+    await db
+      .prepare("INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?, 'met_accession', ?)")
+      .run(id, extra.accession);
   }
   return id;
 }

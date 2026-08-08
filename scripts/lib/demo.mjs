@@ -183,7 +183,7 @@ function intBetween(random, [low, high]) {
   return low + Math.floor(random() * (high - low + 1));
 }
 
-export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
+export async function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
   const random = rng(seed);
   const personas = [
     ...PERSONAS,
@@ -194,13 +194,13 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
   const today = new Date();
   today.setUTCHours(12, 0, 0, 0);
 
-  const venues = db.prepare("SELECT id, slug FROM venues").all();
+  const venues = await db.prepare("SELECT id, slug FROM venues").all();
   if (!venues.length) throw new Error("seed the catalogue first: scripts/db.mjs seed");
 
   // Works grouped by (venue, gallery). Real visits are contiguous: you log six
   // things in one room, not six things scattered across the building.
   const galleries = new Map();
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT d.work_id, d.venue_id, d.location_label
          FROM displays d
@@ -222,7 +222,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     follows: 0, likes: 0, comments: 0, watchlist: 0, favourites: 0, exhibitions: 0,
   };
 
-  transact(db, () => {
+  await transact(db, async () => {
     // ------------------------------------------------------------- users --
     const password = hashPassword("verso-demo");
     const insertUser = db.prepare(
@@ -234,7 +234,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     for (const persona of personas) {
       const joined = new Date(today);
       joined.setUTCDate(joined.getUTCDate() - days - intBetween(random, [1, 40]));
-      insertUser.run(
+      await insertUser.run(
         persona.handle,
         persona.display_name,
         `${persona.handle}@example.test`,
@@ -243,7 +243,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
         "New York",
         `${isoDate(joined)} 09:00:00`,
       );
-      const id = db.prepare("SELECT id FROM users WHERE handle = ?").get(persona.handle).id;
+      const id = (await db.prepare("SELECT id FROM users WHERE handle = ?").get(persona.handle)).id;
       userIds.set(persona.handle, id);
       summary.users++;
     }
@@ -251,13 +251,13 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     // One demo account can see /internal, so the gate pages and the
     // institutional dashboards are reachable in a demo without handing them to
     // everyone who signs up.
-    db.prepare("UPDATE users SET is_staff = 1 WHERE handle = 'priya'").run();
+    await db.prepare("UPDATE users SET is_staff = 1 WHERE handle = 'priya'").run();
 
     const insertFollow = db.prepare(
-      "INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)",
+      "INSERT INTO follows (follower_id, followee_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
     );
     for (const [a, b] of FOLLOWS) {
-      insertFollow.run(userIds.get(a), userIds.get(b));
+      await insertFollow.run(userIds.get(a), userIds.get(b));
       summary.follows++;
     }
 
@@ -274,7 +274,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
             ? pick(random, PERSONAS).handle
             : pick(random, allHandles);
         if (target === persona.handle) continue;
-        insertFollow.run(userIds.get(persona.handle), userIds.get(target));
+        await insertFollow.run(userIds.get(persona.handle), userIds.get(target));
         summary.follows++;
       }
     }
@@ -290,7 +290,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     // A null starts_on is the museum's "Through …" or "Ongoing" — no published
     // opening date, but listed as open. Filtering those out concentrated 97% of
     // exhibition sightings on the one show that happened to publish its dates.
-    const openExhibitions = db
+    const openExhibitions = await db
       .prepare("SELECT id, venue_id, starts_on, ends_on FROM exhibitions ORDER BY id")
       .all();
     const exhibitionsByVenue = new Map();
@@ -304,10 +304,10 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
       `INSERT INTO sightings (client_uuid, user_id, work_id, venue_id, exhibition_id,
                               seen_on, date_precision, rating, review, private_note,
                               source, encounter, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
     );
     const insertTag = db.prepare(
-      "INSERT OR IGNORE INTO sighting_tags (sighting_id, tag) VALUES (?, ?)",
+      "INSERT INTO sighting_tags (sighting_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING",
     );
     const insertRecognition = db.prepare(
       `INSERT INTO recognition_events (user_id, venue_id, top_work_id, chosen_work_id,
@@ -372,7 +372,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
             openThatDay.length && random() < 0.2 ? pick(random, openThatDay).id : null;
           const capture = random() < 0.7;
 
-          const result = insertSighting.run(
+          const created = await insertSighting.get(
             `demo-${++uuid}`,
             userId,
             workId,
@@ -388,22 +388,22 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
             `${seenOn} ${10 + Math.floor(random() * 8)}:${String(Math.floor(random() * 60)).padStart(2, "0")}:00`,
             `${seenOn} 20:00:00`,
           );
-          const sightingId = Number(result.lastInsertRowid);
+          const sightingId = created.id;
           sightingsByUser.get(userId).push({ id: sightingId, workId, hasReview: !!review });
           summary.sightings++;
           if (rating) summary.ratings++;
           if (review) summary.reviews++;
 
-          if (random() < 0.35) insertTag.run(sightingId, pick(random, TAG_POOL));
-          if (random() < 0.15) insertTag.run(sightingId, pick(random, TAG_POOL));
+          if (random() < 0.35) await insertTag.run(sightingId, pick(random, TAG_POOL));
+          if (random() < 0.15) await insertTag.run(sightingId, pick(random, TAG_POOL));
 
-          assertDisplay(db, { workId, venueId, seenOn, exhibitionId });
+          await assertDisplay(db, { workId, venueId, seenOn, exhibitionId });
 
           if (capture) {
             // Most captures accept the top match; a minority correct it. This
             // is what the §13 guardrail measures.
             const acceptedTop = random() < 0.968;
-            insertRecognition.run(
+            await insertRecognition.run(
               userId, venueId,
               acceptedTop ? workId : pick(random, pool),
               workId,
@@ -414,7 +414,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
           }
         }
 
-        insertEvent.run(userId, "capture_session", `${seenOn} 12:00:00`, null);
+        await insertEvent.run(userId, "capture_session", `${seenOn} 12:00:00`, null);
       }
 
       // A backfill burst on signup: logging from memory, undated (§9.2).
@@ -423,7 +423,7 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
         const gallery = pick(random, galleryList);
         const workId = pick(random, gallery.works);
         try {
-          insertSighting.run(
+          await insertSighting.run(
             `demo-${++uuid}`, userId, workId, gallery.venueId, null,
             null, "unknown",
             random() < 0.8 ? Math.min(10, 6 + Math.floor(random() * 5)) : null,
@@ -443,19 +443,19 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
       for (let i = 0; i < opens; i++) {
         const when = new Date(today);
         when.setUTCDate(when.getUTCDate() - Math.floor(random() * days));
-        insertEvent.run(userId, "feed_open", `${isoDate(when)} 08:00:00`, null);
+        await insertEvent.run(userId, "feed_open", `${isoDate(when)} 08:00:00`, null);
       }
     }
 
     // -------------------------------------------------- likes and comments --
-    const publicReviews = db
+    const publicReviews = await db
       .prepare(
         `SELECT id, user_id FROM sightings
           WHERE review IS NOT NULL AND review_public = 1 AND is_private = 0`,
       )
       .all();
     const insertLike = db.prepare(
-      "INSERT OR IGNORE INTO likes (user_id, sighting_id) VALUES (?, ?)",
+      "INSERT INTO likes (user_id, sighting_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
     );
     const insertComment = db.prepare(
       "INSERT INTO comments (sighting_id, user_id, body) VALUES (?, ?, ?)",
@@ -472,11 +472,11 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
       for (const userId of allUserIds) {
         if (userId === review.user_id) continue;
         if (random() < 0.05) {
-          insertLike.run(userId, review.id);
+          await insertLike.run(userId, review.id);
           summary.likes++;
         }
         if (random() < 0.012) {
-          insertComment.run(review.id, userId, pick(random, commentLines));
+          await insertComment.run(review.id, userId, pick(random, commentLines));
           summary.comments++;
         }
       }
@@ -488,34 +488,34 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
        VALUES (?,?,?,?,1,?) ON CONFLICT(user_id, slug) DO NOTHING`,
     );
     const insertListItem = db.prepare(
-      `INSERT OR IGNORE INTO list_items (list_id, work_id, position, note)
-       VALUES (?,?,?,?)`,
+      `INSERT INTO list_items (list_id, work_id, position, note)
+       VALUES (?,?,?,?) ON CONFLICT DO NOTHING`,
     );
     for (const spec of LIST_SPECS) {
       const userId = userIds.get(spec.handle);
       const slug = spec.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      insertList.run(userId, slug, spec.title, spec.description, spec.ranked);
-      const list = db
+      await insertList.run(userId, slug, spec.title, spec.description, spec.ranked);
+      const list = await db
         .prepare("SELECT id FROM lists WHERE user_id = ? AND slug = ?")
         .get(userId, slug);
       const seen = sightingsByUser.get(userId) ?? [];
       for (let i = 0; i < spec.size && seen.length; i++) {
         const entry = pick(random, seen);
-        insertListItem.run(list.id, entry.workId, i, "");
+        await insertListItem.run(list.id, entry.workId, i, "");
       }
       summary.lists++;
     }
 
     const insertWatch = db.prepare(
-      "INSERT OR IGNORE INTO watchlist (user_id, work_id, note) VALUES (?,?,?)",
+      "INSERT INTO watchlist (user_id, work_id, note) VALUES (?,?,?) ON CONFLICT DO NOTHING",
     );
-    const watchPool = db
+    const watchPool = await db
       .prepare("SELECT id FROM works ORDER BY id LIMIT 400")
       .all();
     for (const userId of allUserIds) {
       const count = intBetween(random, [3, 9]);
       for (let i = 0; i < count; i++) {
-        insertWatch.run(userId, pick(random, watchPool).id, "");
+        await insertWatch.run(userId, pick(random, watchPool).id, "");
         summary.watchlist++;
       }
     }
@@ -525,30 +525,35 @@ export function seedDemo(db, { days = 180, seed = 20260729 } = {}) {
     // actually picks a top four — and because the store refuses a work the user
     // has no sighting for, so anything else would silently insert nothing.
     const insertFavourite = db.prepare(
-      "INSERT OR IGNORE INTO favourites (user_id, work_id, position) VALUES (?,?,?)",
+      "INSERT INTO favourites (user_id, work_id, position) VALUES (?,?,?) ON CONFLICT DO NOTHING",
     );
     const bestRated = db.prepare(
-      `SELECT DISTINCT work_id FROM sightings
+      // Postgres, unlike SQLite, forbids ORDER BY on a column absent from a
+      // SELECT DISTINCT list — GROUP BY gives the same distinct works, ordered
+      // by each work's best rating.
+      `SELECT work_id FROM sightings
         WHERE user_id = ? AND rating IS NOT NULL
-        ORDER BY rating DESC, work_id LIMIT 4`,
+        GROUP BY work_id
+        ORDER BY MAX(rating) DESC, work_id LIMIT 4`,
     );
     for (const userId of allUserIds) {
       // Not everyone fills all four. A profile where every account has exactly
       // four favourites looks seeded, because it is.
       const slots = intBetween(random, [0, 4]);
-      bestRated.all(userId).slice(0, slots).forEach((row, index) => {
-        insertFavourite.run(userId, row.work_id, index + 1);
+      const favourites = (await bestRated.all(userId)).slice(0, slots);
+      for (const [index, row] of favourites.entries()) {
+        await insertFavourite.run(userId, row.work_id, index + 1);
         summary.favourites++;
-      });
+      }
     }
 
     // Shows that actually received sightings — the count that describes what
     // the demo did, not what the seed loaded.
-    summary.exhibitions = db
+    summary.exhibitions = (await db
       .prepare(
         "SELECT COUNT(DISTINCT exhibition_id) AS n FROM sightings WHERE exhibition_id IS NOT NULL",
       )
-      .get().n;
+      .get()).n;
   });
 
   return summary;

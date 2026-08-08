@@ -39,12 +39,11 @@ test("a serverless host with a local-file database is a data-loss blocker", () =
   assert.equal(statusOf(checks, "media"), "fail", "local-disk photos are the same trap");
 });
 
-test("a serverless host with Turso and Blob configured passes both", () => {
+test("a serverless host with Neon and Blob configured passes both", () => {
   const checks = checkAll(
     configured({
       VERCEL: "1",
-      VERSO_DATABASE_URL: "libsql://verso-prod.turso.io",
-      VERSO_DATABASE_AUTH_TOKEN: "tok",
+      DATABASE_URL: "postgres://verso:pw@ep-cool-frog.us-east-2.aws.neon.tech/verso?sslmode=require",
       BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_x",
     }),
     // No local database/media on disk, but the source tree (middleware) is there.
@@ -56,13 +55,20 @@ test("a serverless host with Turso and Blob configured passes both", () => {
   assert.equal(summarise(checks).fail, 0);
 });
 
-test("a remote database URL without its auth token blocks in production", () => {
+test("a Neon connection string passes with no separate token, and its password is never echoed", () => {
+  // Postgres embeds credentials in the URL, so there is no auth token to set —
+  // but that means preflight output must never print the connection string
+  // verbatim. hostOf() strips everything but the host.
   const checks = checkAll(
-    configured({ VERSO_DATABASE_URL: "libsql://verso-prod.turso.io" }),
+    configured({
+      DATABASE_URL: "postgres://verso:supersecret@ep-cool-frog.us-east-2.aws.neon.tech/verso?sslmode=require",
+    }),
     ALL_GOOD,
     READY_STATE,
   );
-  assert.equal(statusOf(checks, "database"), "fail");
+  assert.equal(statusOf(checks, "database"), "pass");
+  const detail = checks.find((c) => c.name === "database")?.detail ?? "";
+  assert.ok(!detail.includes("supersecret"), "the connection string password must not appear in preflight output");
 });
 
 test("a missing middleware means no CSP is being sent, and that blocks", () => {

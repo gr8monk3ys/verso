@@ -2,6 +2,9 @@ import "server-only";
 import { all, get, run, transact } from "@/lib/db";
 import { slugify } from "@/lib/text.mjs";
 
+/** Postgres equivalent of SQLite's datetime('now') — UTC, 'YYYY-MM-DD HH:MM:SS'. */
+const NOW = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')";
+
 export type List = {
   id: number;
   user_id: number;
@@ -14,22 +17,22 @@ export type List = {
   updated_at: string;
 };
 
-export function createList(input: {
+export async function createList(input: {
   userId: number;
   title: string;
   description?: string;
   isPublic?: boolean;
   isRanked?: boolean;
-}): List {
+}): Promise<List> {
   const base = slugify(input.title) || "list";
   let slug = base;
   let suffix = 2;
-  while (get("SELECT 1 FROM lists WHERE user_id = ? AND slug = ?", input.userId, slug)) {
+  while (await get("SELECT 1 FROM lists WHERE user_id = ? AND slug = ?", input.userId, slug)) {
     slug = `${base}-${suffix++}`;
   }
-  const result = run(
+  const created = await get<{ id: number }>(
     `INSERT INTO lists (user_id, slug, title, description, is_public, is_ranked)
-     VALUES (?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?) RETURNING id`,
     input.userId,
     slug,
     input.title.trim().slice(0, 120),
@@ -37,10 +40,10 @@ export function createList(input: {
     input.isPublic === false ? 0 : 1,
     input.isRanked ? 1 : 0,
   );
-  return get<List>("SELECT * FROM lists WHERE id = ?", Number(result.lastInsertRowid))!;
+  return (await get<List>("SELECT * FROM lists WHERE id = ?", created!.id))!;
 }
 
-export function listsForUser(userId: number, viewerId: number | null) {
+export async function listsForUser(userId: number, viewerId: number | null) {
   const privacy = viewerId === userId ? "" : "AND l.is_public = 1";
   return all<List & { item_count: number }>(
     `SELECT l.*, (SELECT COUNT(*) FROM list_items i WHERE i.list_id = l.id) AS item_count
@@ -50,7 +53,7 @@ export function listsForUser(userId: number, viewerId: number | null) {
   );
 }
 
-export function listBySlug(userId: number, slug: string) {
+export async function listBySlug(userId: number, slug: string) {
   return get<List>("SELECT * FROM lists WHERE user_id = ? AND slug = ?", userId, slug);
 }
 
@@ -68,7 +71,7 @@ export type BrowseList = List & {
  * a list somebody touched this week is alive; a ranking that pretended more
  * would be the popular-chart mistake again, a chart that does not discriminate.
  */
-export function publicLists(limit = 40, offset = 0): BrowseList[] {
+export async function publicLists(limit = 40, offset = 0): Promise<BrowseList[]> {
   return all<BrowseList>(
     `SELECT l.*, u.handle, u.display_name,
             (SELECT COUNT(*) FROM list_items i WHERE i.list_id = l.id) AS item_count
@@ -85,7 +88,7 @@ export function publicLists(limit = 40, offset = 0): BrowseList[] {
  * Lists a work appears in — discovery in the direction people actually travel:
  * from a work they liked to the company other people put it in.
  */
-export function listsFeaturingWork(workId: number, limit = 6): BrowseList[] {
+export async function listsFeaturingWork(workId: number, limit = 6): Promise<BrowseList[]> {
   return all<BrowseList>(
     `SELECT l.*, u.handle, u.display_name,
             (SELECT COUNT(*) FROM list_items i WHERE i.list_id = l.id) AS item_count
@@ -101,7 +104,7 @@ export function listsFeaturingWork(workId: number, limit = 6): BrowseList[] {
 }
 
 /** A few covers to give a list row a face. */
-export function listPreviewWorks(listId: number, limit = 4) {
+export async function listPreviewWorks(listId: number, limit = 4) {
   return all<{ id: number; slug: string; title: string; artist_display: string; image_url: string | null }>(
     `SELECT w.id, w.slug, w.title, w.artist_display, w.image_url
        FROM list_items i JOIN works w ON w.id = i.work_id
@@ -112,7 +115,7 @@ export function listPreviewWorks(listId: number, limit = 4) {
   );
 }
 
-export function listItems(listId: number) {
+export async function listItems(listId: number) {
   return all<{
     id: number;
     position: number;
@@ -138,34 +141,36 @@ export function listItems(listId: number) {
  * an authorisation. Before this check, any signed-in account could add to or
  * delete from anyone's list by posting their list_id.
  */
-export function addToList(listId: number, userId: number, workId: number, note = "") {
-  if (!get("SELECT 1 FROM lists WHERE id = ? AND user_id = ?", listId, userId)) return;
-  const next = get<{ n: number }>(
+export async function addToList(listId: number, userId: number, workId: number, note = "") {
+  if (!(await get("SELECT 1 FROM lists WHERE id = ? AND user_id = ?", listId, userId))) return;
+  const next = (await get<{ n: number }>(
     "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM list_items WHERE list_id = ?",
     listId,
-  )!.n;
-  run(
-    "INSERT OR IGNORE INTO list_items (list_id, work_id, position, note) VALUES (?,?,?,?)",
+  ))!.n;
+  await run(
+    "INSERT INTO list_items (list_id, work_id, position, note) VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
     listId,
     workId,
     next,
     note,
   );
-  run("UPDATE lists SET updated_at = datetime('now') WHERE id = ?", listId);
+  await run(`UPDATE lists SET updated_at = ${NOW} WHERE id = ?`, listId);
 }
 
-export function removeFromList(listId: number, userId: number, itemId: number) {
-  if (!get("SELECT 1 FROM lists WHERE id = ? AND user_id = ?", listId, userId)) return;
-  run("DELETE FROM list_items WHERE id = ? AND list_id = ?", itemId, listId);
-  run("UPDATE lists SET updated_at = datetime('now') WHERE id = ?", listId);
+export async function removeFromList(listId: number, userId: number, itemId: number) {
+  if (!(await get("SELECT 1 FROM lists WHERE id = ? AND user_id = ?", listId, userId))) return;
+  await run("DELETE FROM list_items WHERE id = ? AND list_id = ?", itemId, listId);
+  await run(`UPDATE lists SET updated_at = ${NOW} WHERE id = ?`, listId);
 }
 
-export function reorderList(listId: number, orderedItemIds: number[]) {
-  transact(() => {
-    orderedItemIds.forEach((itemId, index) => {
-      run("UPDATE list_items SET position = ? WHERE id = ? AND list_id = ?", index, itemId, listId);
-    });
-    run("UPDATE lists SET updated_at = datetime('now') WHERE id = ?", listId);
+export async function reorderList(listId: number, orderedItemIds: number[]) {
+  await transact(async (tx) => {
+    for (const [index, itemId] of orderedItemIds.entries()) {
+      await tx
+        .prepare("UPDATE list_items SET position = ? WHERE id = ? AND list_id = ?")
+        .run(index, itemId, listId);
+    }
+    await tx.prepare(`UPDATE lists SET updated_at = ${NOW} WHERE id = ?`).run(listId);
   });
 }
 
@@ -179,38 +184,38 @@ export function reorderList(listId: number, orderedItemIds: number[]) {
  * Ownership is checked here, not in reorderList: this is the entry point a
  * form reaches with attacker-suppliable ids.
  */
-export function moveListItem(
+export async function moveListItem(
   listId: number,
   userId: number,
   itemId: number,
   direction: "up" | "down",
 ) {
-  const owned = get<{ id: number }>(
+  const owned = await get<{ id: number }>(
     "SELECT id FROM lists WHERE id = ? AND user_id = ?",
     listId,
     userId,
   );
   if (!owned) return;
 
-  const ordered = all<{ id: number }>(
+  const ordered = (await all<{ id: number }>(
     "SELECT id FROM list_items WHERE list_id = ? ORDER BY position, id",
     listId,
-  ).map((row) => row.id);
+  )).map((row) => row.id);
   const index = ordered.indexOf(itemId);
   const target = direction === "up" ? index - 1 : index + 1;
   if (index === -1 || target < 0 || target >= ordered.length) return;
 
   [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-  reorderList(listId, ordered);
+  await reorderList(listId, ordered);
 }
 
-export function deleteList(listId: number, userId: number) {
-  run("DELETE FROM lists WHERE id = ? AND user_id = ?", listId, userId);
+export async function deleteList(listId: number, userId: number) {
+  await run("DELETE FROM lists WHERE id = ? AND user_id = ?", listId, userId);
 }
 
 // ------------------------------------------------------------- watchlist ---
 
-export function watchlistFor(userId: number) {
+export async function watchlistFor(userId: number) {
   return all<{
     work_id: number;
     slug: string;
@@ -225,7 +230,7 @@ export function watchlistFor(userId: number) {
   }>(
     `SELECT wl.work_id, w.slug, w.title, w.artist_display, w.image_url, wl.note, wl.created_at,
             v.name AS venue_name, v.city AS venue_city,
-            (d.id IS NOT NULL) AS on_view
+            (d.id IS NOT NULL)::int AS on_view
        FROM watchlist wl
        JOIN works w ON w.id = wl.work_id
        LEFT JOIN displays d ON d.work_id = w.id AND d.ended_on IS NULL
@@ -236,17 +241,17 @@ export function watchlistFor(userId: number) {
   );
 }
 
-export function isWatched(userId: number, workId: number): boolean {
+export async function isWatched(userId: number, workId: number): Promise<boolean> {
   return Boolean(
-    get("SELECT 1 FROM watchlist WHERE user_id = ? AND work_id = ?", userId, workId),
+    await get("SELECT 1 FROM watchlist WHERE user_id = ? AND work_id = ?", userId, workId),
   );
 }
 
-export function toggleWatch(userId: number, workId: number): boolean {
-  if (isWatched(userId, workId)) {
-    run("DELETE FROM watchlist WHERE user_id = ? AND work_id = ?", userId, workId);
+export async function toggleWatch(userId: number, workId: number): Promise<boolean> {
+  if (await isWatched(userId, workId)) {
+    await run("DELETE FROM watchlist WHERE user_id = ? AND work_id = ?", userId, workId);
     return false;
   }
-  run("INSERT INTO watchlist (user_id, work_id) VALUES (?, ?)", userId, workId);
+  await run("INSERT INTO watchlist (user_id, work_id) VALUES (?, ?)", userId, workId);
   return true;
 }

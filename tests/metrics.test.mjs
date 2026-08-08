@@ -38,31 +38,31 @@ test("the gate verdict is exactly the §13 thresholds", () => {
   assert.equal(failing.guardrail.pass, false);
 });
 
-test("frequency is measured per active user per month, not per user", () => {
-  const db = testDb();
-  const venue = addVenue(db, "met");
-  const works = Array.from({ length: 20 }, (_, index) => addWork(db, `w${index}`));
-  const keen = addUser(db, "priya");
-  addUser(db, "dormant"); // signed up, never logged
+test("frequency is measured per active user per month, not per user", async () => {
+  const db = await testDb();
+  const venue = await addVenue(db, "met");
+  const works = await Promise.all(Array.from({ length: 20 }, (_, index) => addWork(db, `w${index}`)));
+  const keen = await addUser(db, "priya");
+  await addUser(db, "dormant"); // signed up, never logged
 
   for (const work of works) {
-    createSighting(db, { userId: keen, workId: work, venueId: venue, seenOn: "2026-07-01" });
+    await createSighting(db, { userId: keen, workId: work, venueId: venue, seenOn: "2026-07-01" });
   }
 
-  const metrics = computeMetrics(db, { windowDays: 90 });
+  const metrics = await computeMetrics(db, { windowDays: 90 });
   assert.equal(metrics.totals.activeUsers, 1, "a dormant account is not an active user");
   assert.equal(metrics.v0.medianWorksPerActiveUserPerMonth, 20);
   assert.ok(metrics.verdict.v0.checks.medianWorksPerActiveUserPerMonth.pass);
 });
 
-test("rating and review attach rates come from all sightings", () => {
-  const db = testDb();
-  const venue = addVenue(db, "met");
-  const user = addUser(db, "tom");
-  const works = Array.from({ length: 10 }, (_, index) => addWork(db, `w${index}`));
+test("rating and review attach rates come from all sightings", async () => {
+  const db = await testDb();
+  const venue = await addVenue(db, "met");
+  const user = await addUser(db, "tom");
+  const works = await Promise.all(Array.from({ length: 10 }, (_, index) => addWork(db, `w${index}`)));
 
-  works.forEach((work, index) => {
-    createSighting(db, {
+  for (const [index, work] of works.entries()) {
+    await createSighting(db, {
       userId: user,
       workId: work,
       venueId: venue,
@@ -70,26 +70,26 @@ test("rating and review attach rates come from all sightings", () => {
       rating: index < 5 ? 8 : null,
       review: index < 2 ? "Kept thinking about it." : null,
     });
-  });
+  }
 
-  const metrics = computeMetrics(db);
+  const metrics = await computeMetrics(db);
   assert.equal(metrics.v1.ratedShare, 0.5);
   assert.equal(metrics.v1.reviewedShare, 0.2);
 });
 
-test("recognition acceptance is reported as telemetry, and never gates", () => {
-  const db = testDb();
-  const user = addUser(db, "jo");
-  const work = addWork(db, "w1");
+test("recognition acceptance is reported as telemetry, and never gates", async () => {
+  const db = await testDb();
+  const user = await addUser(db, "jo");
+  const work = await addWork(db, "w1");
   const insert = db.prepare(
     `INSERT INTO recognition_events (user_id, top_work_id, chosen_work_id, chosen_rank, top_score)
      VALUES (?,?,?,?,?)`,
   );
-  for (let i = 0; i < 19; i++) insert.run(user, work, work, 0, 0.9);
-  insert.run(user, work, work, 1, 0.9); // user picked an alternate
+  for (let i = 0; i < 19; i++) await insert.run(user, work, work, 0, 0.9);
+  await insert.run(user, work, work, 1, 0.9); // user picked an alternate
 
   // Still computed — it is real once real people are tapping suggestions.
-  const metrics = computeMetrics(db, {
+  const metrics = await computeMetrics(db, {
     catalogueEval: { precision: 0.97, sampled: 120, generatedAt: "2026-07-29", source: "test" },
   });
   assert.equal(metrics.telemetry.recognitionAcceptance, 0.95);
@@ -99,21 +99,21 @@ test("recognition acceptance is reported as telemetry, and never gates", () => {
   assert.ok(metrics.verdict.guardrail.pass);
 });
 
-test("an unmeasured catalogue guardrail fails rather than passing quietly", () => {
+test("an unmeasured catalogue guardrail fails rather than passing quietly", async () => {
   // The whole point of moving off the seeded number: absence of evidence must not
   // read as evidence. A fresh checkout with no evaluation artifact does not ship.
-  const db = testDb();
-  const metrics = computeMetrics(db);
+  const db = await testDb();
+  const metrics = await computeMetrics(db);
   assert.equal(metrics.guardrail.catalogueMatchAccuracy, null);
   assert.equal(metrics.verdict.guardrail.checks.catalogueMatchAccuracy.measured, false);
   assert.equal(metrics.verdict.guardrail.pass, false);
 });
 
-test("the catalogue guardrail gates on the measured value", () => {
-  const db = testDb();
+test("the catalogue guardrail gates on the measured value", async () => {
+  const db = await testDb();
   const at = { sampled: 120, generatedAt: "2026-07-29", source: "wikidata-live" };
-  const pass = computeMetrics(db, { catalogueEval: { precision: 0.95, ...at } });
-  const fail = computeMetrics(db, { catalogueEval: { precision: 0.9499, ...at } });
+  const pass = await computeMetrics(db, { catalogueEval: { precision: 0.95, ...at } });
+  const fail = await computeMetrics(db, { catalogueEval: { precision: 0.9499, ...at } });
   assert.ok(pass.verdict.guardrail.pass, "the threshold is inclusive");
   assert.equal(fail.verdict.guardrail.pass, false);
   assert.equal(pass.guardrail.catalogueSample, 120);
