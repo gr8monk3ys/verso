@@ -15,6 +15,8 @@ export type Artist = {
   display_name: string;
   sort_name: string;
   ulan: string | null;
+  birth_year: number | null;
+  death_year: number | null;
   work_count: number;
 };
 
@@ -163,6 +165,37 @@ export function reviewsForArtist(artistId: number, limit = 6): ArtistReview[] {
       ORDER BY like_count DESC, s.created_at DESC
       LIMIT ?`,
     artistId,
+    limit,
+  );
+}
+
+/**
+ * The browse index: every artist with more than one attributed work, A–Z by
+ * sort name, paginated. The single-work tail (over half the table) is browsable
+ * nowhere and findable everywhere — search still covers it — because a
+ * thousand-row list of names with one object each is a phone book, not a
+ * discovery surface.
+ */
+export function browseArtists(options: { limit?: number; offset?: number } = {}) {
+  const { limit = 120, offset = 0 } = options;
+  return all<Artist>(
+    `SELECT * FROM artists
+      WHERE work_count > 1
+      ORDER BY sort_name, id
+      LIMIT ? OFFSET ?`,
+    limit,
+    offset,
+  );
+}
+
+export function browseArtistCount(): number {
+  return get<{ n: number }>("SELECT COUNT(*) AS n FROM artists WHERE work_count > 1")!.n;
+}
+
+/** The wall of names people actually come for: largest bodies of work first. */
+export function mostRepresentedArtists(limit = 12): Artist[] {
+  return all<Artist>(
+    "SELECT * FROM artists ORDER BY work_count DESC, sort_name LIMIT ?",
     limit,
   );
 }

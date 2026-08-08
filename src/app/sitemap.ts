@@ -25,6 +25,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticPages: MetadataRoute.Sitemap = [
     { url: `${origin}/`, changeFrequency: "daily", priority: 1 },
     { url: `${origin}/popular`, changeFrequency: "daily", priority: 0.8 },
+    { url: `${origin}/artists`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${origin}/lists`, changeFrequency: "daily", priority: 0.6 },
     { url: `${origin}/exhibitions`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${origin}/search`, changeFrequency: "weekly", priority: 0.6 },

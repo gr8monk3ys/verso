@@ -5,7 +5,7 @@ import { userByHandle } from "@/lib/domain/social";
 import { listBySlug, listItems } from "@/lib/domain/lists";
 import { Plate } from "@/components/Plate";
 import { displayArtist, displayTitle, pluralize } from "@/lib/format";
-import { removeFromListAction, deleteListAction } from "@/app/actions";
+import { deleteListAction, moveListItemAction, removeFromListAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -67,12 +67,39 @@ export default async function ListPage({
               {item.note && <p className="mt-1 text-sm">{item.note}</p>}
             </div>
             {isSelf && (
-              <form action={removeFromListAction}>
-                <input type="hidden" name="list_id" value={list.id} />
-                <input type="hidden" name="item_id" value={item.id} />
-                <input type="hidden" name="next" value={path} />
-                <button className="text-xs text-[var(--color-muted)]">Remove</button>
-              </form>
+              <div className="flex shrink-0 items-center gap-2">
+                {items.length > 1 && (
+                  <form action={moveListItemAction} className="flex flex-col">
+                    <input type="hidden" name="list_id" value={list.id} />
+                    <input type="hidden" name="item_id" value={item.id} />
+                    <input type="hidden" name="next" value={path} />
+                    <button
+                      name="direction"
+                      value="up"
+                      disabled={index === 0}
+                      aria-label={`Move ${displayTitle(item.title)} up`}
+                      className="cursor-pointer px-1 text-xs text-[var(--color-muted)] disabled:opacity-30"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      name="direction"
+                      value="down"
+                      disabled={index === items.length - 1}
+                      aria-label={`Move ${displayTitle(item.title)} down`}
+                      className="cursor-pointer px-1 text-xs text-[var(--color-muted)] disabled:opacity-30"
+                    >
+                      ▼
+                    </button>
+                  </form>
+                )}
+                <form action={removeFromListAction}>
+                  <input type="hidden" name="list_id" value={list.id} />
+                  <input type="hidden" name="item_id" value={item.id} />
+                  <input type="hidden" name="next" value={path} />
+                  <button className="text-xs text-[var(--color-muted)]">Remove</button>
+                </form>
+              </div>
             )}
           </li>
         ))}

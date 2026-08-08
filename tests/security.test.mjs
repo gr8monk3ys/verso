@@ -239,8 +239,11 @@ test("a partial-form patch never writes someone else's sighting", () => {
 
 test("a replayed client_uuid belonging to someone else touches nothing", () => {
   // The offline queue mints client_uuid on the device, so it arrives as
-  // attacker-controlled input on /api/sightings. Idempotency must therefore be
-  // scoped to the owner: a uuid is only ever a replay of *your* own capture.
+  // attacker-controlled input on /api/sightings. Idempotency is scoped to the
+  // owner — by the schema itself, UNIQUE(user_id, client_uuid) — so a foreign
+  // uuid lands as the attacker's own independent sighting. The victim's row is
+  // never matched, never rewritten, never returned; and unlike the old global
+  // constraint, nobody can pre-insert a uuid to block someone else's sync.
   const db = testDb();
   const victim = addUser(db, "victim");
   const attacker = addUser(db, "attacker");
@@ -255,20 +258,34 @@ test("a replayed client_uuid belonging to someone else touches nothing", () => {
 
   const replay = createSighting(db, {
     clientUuid: "shared-uuid", userId: attacker, workId: work, venueId: venue,
-    seenOn: "2026-07-02", rating: 1, review: "overwritten",
+    seenOn: "2026-07-02", rating: 1, review: "their own entry",
   });
 
-  assert.equal(replay, null, "a foreign uuid is refused rather than applied");
+  assert.equal(replay.user_id, attacker, "the write lands on the attacker's own diary");
+  assert.notEqual(replay.id, original.id, "as a separate row");
 
   const after = db.prepare("SELECT * FROM sightings WHERE id = ?").get(original.id);
   assert.equal(after.user_id, victim, "ownership is untouched");
   assert.equal(after.rating, 5, "the rating is not overwritten");
   assert.equal(after.review, "The victim's own words.", "the review is not overwritten");
-  assert.equal(
-    db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n,
-    1,
-    "and no row was created under the attacker either",
+
+  // And the attacker's copy leaked nothing: it carries only what they sent.
+  assert.equal(replay.private_note, null);
+  assert.equal(replay.is_private, 0);
+});
+
+test("the same user cannot hold one uuid twice, even bypassing the store", () => {
+  // The constraint that makes replays safe lives in the schema, not only in
+  // createSighting's lookup — a raw INSERT with a duplicate (user, uuid) fails.
+  const db = testDb();
+  const user = addUser(db, "priya");
+  const work = addWork(db, "vermeer");
+  const insert = db.prepare(
+    "INSERT INTO sightings (client_uuid, user_id, work_id) VALUES (?,?,?)",
   );
+
+  insert.run("uuid-1", user, work);
+  assert.throws(() => insert.run("uuid-1", user, work), /UNIQUE/);
 });
 
 test("a replayed client_uuid of your own still carries a late rating", () => {

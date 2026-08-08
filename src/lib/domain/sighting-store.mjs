@@ -48,17 +48,16 @@ export function setTags(db, sightingId, tags) {
  * is minted on the device, so it reaches /api/sightings as attacker-controlled
  * input: matched on the uuid alone, a signed-in user who supplied someone else's
  * uuid would rewrite that person's rating, review and tags and be handed their
- * row back. A uuid is only ever a replay of *your* own capture. Returns null when
- * the uuid belongs to somebody else, which the caller reports as a rejection
- * rather than retrying forever.
+ * row back. A uuid is only ever a replay of *your* own capture.
+ *
+ * The schema now agrees — UNIQUE(user_id, client_uuid), not a global UNIQUE —
+ * so someone else holding "your" uuid is not this function's business at all.
+ * The earlier code-level refusal is gone with the global constraint that forced
+ * it: refusing meant a stranger's insert became a fact about yours, which let
+ * anyone who learned a queued uuid pre-insert it and block that sync forever.
  */
 export function createSighting(db, input) {
   if (input.clientUuid) {
-    const owner = db
-      .prepare("SELECT user_id FROM sightings WHERE client_uuid = ?")
-      .get(input.clientUuid);
-    if (owner && owner.user_id !== input.userId) return null;
-
     const existing = db
       .prepare("SELECT * FROM sightings WHERE client_uuid = ? AND user_id = ?")
       .get(input.clientUuid, input.userId);

@@ -209,7 +209,11 @@ async function main() {
     // Artists are derived from works, so they are rebuilt whenever the catalogue
     // is. An artist is a person; artist_display is a string that sometimes names
     // two of them.
-    const artists = buildArtists(db);
+    const datesPath = path.join(SEED_DIR, "artist-dates.json");
+    const dates = existsSync(datesPath)
+      ? JSON.parse(readFileSync(datesPath, "utf8")).dates
+      : {};
+    const artists = buildArtists(db, { dates });
     console.log(
       `artists ${artists.artists} across ${artists.works} works ` +
         `(${artists.joined} joined by name, ${artists.refused.length} contested names refused)`,

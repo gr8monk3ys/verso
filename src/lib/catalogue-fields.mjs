@@ -85,3 +85,18 @@ function splitField(value) {
     .map((part) => part.trim())
     .filter(Boolean);
 }
+
+/**
+ * "1834–1917", or the honest half when only one side is known: "b. 1834" /
+ * "d. 1917". Null when neither — the caller renders nothing rather than "?–?".
+ *
+ * @param {number|null|undefined} born
+ * @param {number|null|undefined} died
+ * @returns {string|null}
+ */
+export function lifeDates(born, died) {
+  if (born != null && died != null) return `${born}–${died}`;
+  if (born != null) return `b. ${born}`;
+  if (died != null) return `d. ${died}`;
+  return null;
+}

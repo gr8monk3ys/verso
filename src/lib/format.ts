@@ -60,4 +60,4 @@ export function pluralize(count: number, singular: string, plural?: string): str
  * Re-exported here so every screen keeps importing display helpers from one
  * place.
  */
-export { displayArtist, displayTitle, originalTitle } from "./catalogue-fields.mjs";
+export { displayArtist, displayTitle, lifeDates, originalTitle } from "./catalogue-fields.mjs";
