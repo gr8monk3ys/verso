@@ -2,7 +2,7 @@
 /**
  * Life dates for artists, from the Q-numbers the museum already gave us.
  *
- *   node --experimental-sqlite scripts/ingest/artist-dates.mjs
+ *   node scripts/ingest/artist-dates.mjs
  *
  * Writes data/seed/artist-dates.json — a checked-in sidecar keyed by QID, the
  * same shape as exhibitions.json: fetched deliberately, committed, and applied
