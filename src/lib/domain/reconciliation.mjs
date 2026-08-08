@@ -4,7 +4,7 @@
  * Shared by the CLI (`scripts/ingest/reconcile.mjs --accept 12`) and the review
  * queue at /internal/reconciliation, so a decision made in a terminal and one
  * made in a browser cannot drift apart. Every function takes an open
- * node:sqlite handle.
+ * libsql database handle.
  */
 
 /**

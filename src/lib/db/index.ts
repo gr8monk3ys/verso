@@ -1,12 +1,20 @@
-import { DatabaseSync } from "node:sqlite";
+import type { Database } from "libsql";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { applySchema } from "@/lib/db/migrate.mjs";
+import { isRemoteUrl, openDatabase } from "@/lib/db/driver.mjs";
 
 export type Row = Record<string, unknown>;
 
-const DB_PATH =
-  process.env.VERSO_DB_PATH ?? path.join(process.cwd(), "data", "verso.db");
+/**
+ * Where the database is. VERSO_DATABASE_URL (a libsql:// Turso URL) is the
+ * serverless path; VERSO_DB_PATH (a local file) is the one-box path and the
+ * default. Both flow through the same driver.
+ */
+const DB_TARGET =
+  process.env.VERSO_DATABASE_URL ??
+  process.env.VERSO_DB_PATH ??
+  path.join(process.cwd(), "data", "verso.db");
 
 /**
  * schema.sql is read from disk at every boot, so where it is matters.
@@ -36,20 +44,27 @@ function resolveSchemaPath(): string {
 
 declare global {
   // eslint-disable-next-line no-var
-  var __versoDb: DatabaseSync | undefined;
+  var __versoDb: Database | undefined;
 }
 
-function open(): DatabaseSync {
-  const db = new DatabaseSync(DB_PATH);
-  applySchema(db, readFileSync(resolveSchemaPath(), "utf8"));
+function open(): Database {
+  const db = openDatabase(DB_TARGET);
+  let schema = readFileSync(resolveSchemaPath(), "utf8");
+  // WAL is a local-file journal mode; a remote server manages its own storage,
+  // and the pragma would be dead weight in the schema exec.
+  if (isRemoteUrl(DB_TARGET)) {
+    schema = schema.replace(/PRAGMA\s+journal_mode\s*=\s*WAL\s*;?/i, "");
+  }
+  applySchema(db, schema);
   return db;
 }
 
 /**
  * Single process-wide connection. Cached on globalThis so Next's dev-mode
- * module reloading doesn't leak file handles.
+ * module reloading doesn't leak file handles, and so a warm serverless instance
+ * reuses one connection across requests rather than reconnecting per call.
  */
-export function db(): DatabaseSync {
+export function db(): Database {
   if (!globalThis.__versoDb) globalThis.__versoDb = open();
   return globalThis.__versoDb;
 }

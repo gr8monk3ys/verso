@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
+import Database from "libsql";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -22,7 +22,7 @@ const OLD_SIGHTINGS_DDL = SIGHTINGS_DDL.replace(
  * with sightings put back into its pre-migration shape, and live data in it.
  */
 function oldShapeDb() {
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
   db.exec(SCHEMA);
   db.exec("DROP TABLE sightings");
   db.exec(OLD_SIGHTINGS_DDL);
@@ -70,7 +70,7 @@ test("the rebuild runs once and never again", () => {
 });
 
 test("a fresh database is never rebuilt and gets the new shape directly", () => {
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
   applySchema(db, SCHEMA);
 
   // Composite semantics straight from schema.sql, no migration involved.

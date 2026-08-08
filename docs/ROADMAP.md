@@ -54,18 +54,22 @@ on the wall" — is only seen next time someone opens the app, which is precisel
 when it is least useful. Needs a real transactional sender behind the existing
 `VERSO_MAIL` seam, plus a digest and unsubscribe handling.
 
-### Postgres
-SQLite in a single process is correct for this scale and wrong for a launch. The
-query layer is small and has no ORM to unpick, but the rate limiter, the media
-directory and the session store all assume one node and would move with it.
+### A shared rate-limit store
+The database moved from `node:sqlite` to `libsql` (2026-08), so Verso now runs
+on a managed Turso database on serverless as readily as on a local file on one
+box — the query layer, the session store and the media seam all made the trip.
+What did **not** is the rate limiter: it is still an in-process fixed window, so
+on serverless the effective limit is the configured value times the number of
+live instances. Fluid Compute concentrating traffic plus scrypt's per-attempt
+cost make that a real brake at launch scale, but the honest fix is a
+`rate_limits` table on the same libSQL database. It is synchronous work — libSQL
+is synchronous — needing only a global init point, not an async rewrite. The
+per-user write limits on comments, follows and likes share this.
 
 ### Abuse and safety, past the basics
 Report, block, a staff moderation queue and per-user write limits on comments,
 follows, likes and lists all exist. What a real launch still wants is spam
 heuristics on new accounts, an appeals path, and someone whose job this is.
-
-The write limits are also in-process, like the auth limiter — they hold for one
-node and move to shared storage with the Postgres work below.
 
 ### Style-src still allows inline
 `script-src` carries a per-request nonce with `strict-dynamic`, which is the half

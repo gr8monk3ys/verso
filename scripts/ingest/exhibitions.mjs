@@ -19,7 +19,7 @@
  */
 
 /**
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('libsql').Database} db
  * @param {{exhibitions: Array<{slug: string, title: string, venue: string,
  *          starts_on: string|null, ends_on: string|null, url: string}>}} doc
  * @returns {{inserted: number, updated: number, skipped: string[]}}

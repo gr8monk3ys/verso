@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { hashPassword, verifyPassword } from "../src/lib/auth/password.mjs";
 import { checkRateLimit, clearRateLimit, resetRateLimits } from "../src/lib/rate-limit.mjs";
 import { applySchema } from "../src/lib/db/migrate.mjs";
-import { DatabaseSync } from "node:sqlite";
+import Database from "libsql";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { addUser, addVenue, addWork, testDb } from "./helpers.mjs";
@@ -84,7 +84,7 @@ test("the schema migrates onto a database that predates is_staff", () => {
   // The exact production case: schema.sql's CREATE TABLE IF NOT EXISTS is a
   // no-op on an existing table, so without the migration step the column never
   // arrives and every /internal page throws.
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
   db.exec(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY,

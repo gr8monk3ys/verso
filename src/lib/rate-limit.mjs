@@ -1,10 +1,14 @@
 /**
  * Fixed-window rate limiting for the auth forms.
  *
- * In-process and therefore per-instance, which is the honest scope for a
- * single-process SQLite deployment — the same shape as the database. If Verso
- * ever runs on more than one node this has to move to shared storage, and the
- * comment moves with it.
+ * In-process and therefore per-instance. On the one-box deploy that is the whole
+ * system. On serverless (Fluid Compute) it is per warm instance: the effective
+ * limit is the configured value times the number of live instances, which Fluid
+ * keeps small by concentrating traffic. Combined with scrypt — every sign-in
+ * attempt is deliberately expensive — that is a real brake on brute force at
+ * launch scale, but the correct hardening is a shared store (a rate_limits table
+ * on the same libSQL database), noted in docs/ROADMAP.md. This is sync and
+ * libSQL is sync, so that move needs no async, only a global init point.
  *
  * Sign-in is limited per identifier rather than per IP: an attacker with a
  * botnet defeats IP limiting, and limiting by identifier is what protects the

@@ -31,6 +31,40 @@ test("a fully configured production environment has no blockers", () => {
   assert.equal(statusOf(checks, "content-security-policy"), "pass");
 });
 
+test("a serverless host with a local-file database is a data-loss blocker", () => {
+  // The trap the whole libSQL move exists to close: on Vercel the filesystem is
+  // ephemeral and per-instance, so a local-file database loses every write.
+  const checks = checkAll(configured({ VERCEL: "1" }), ALL_GOOD, READY_STATE);
+  assert.equal(statusOf(checks, "database"), "fail");
+  assert.equal(statusOf(checks, "media"), "fail", "local-disk photos are the same trap");
+});
+
+test("a serverless host with Turso and Blob configured passes both", () => {
+  const checks = checkAll(
+    configured({
+      VERCEL: "1",
+      VERSO_DATABASE_URL: "libsql://verso-prod.turso.io",
+      VERSO_DATABASE_AUTH_TOKEN: "tok",
+      BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_x",
+    }),
+    // No local database/media on disk, but the source tree (middleware) is there.
+    { exists: (p) => p === "src/middleware.ts", writable: () => false },
+    READY_STATE,
+  );
+  assert.equal(statusOf(checks, "database"), "pass");
+  assert.equal(statusOf(checks, "media"), "pass");
+  assert.equal(summarise(checks).fail, 0);
+});
+
+test("a remote database URL without its auth token blocks in production", () => {
+  const checks = checkAll(
+    configured({ VERSO_DATABASE_URL: "libsql://verso-prod.turso.io" }),
+    ALL_GOOD,
+    READY_STATE,
+  );
+  assert.equal(statusOf(checks, "database"), "fail");
+});
+
 test("a missing middleware means no CSP is being sent, and that blocks", () => {
   // The policy carries a per-request nonce, so it lives in middleware rather than
   // next.config. Deleting that file silently drops the header from every response,

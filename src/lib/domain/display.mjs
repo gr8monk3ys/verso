@@ -7,7 +7,7 @@
  * module is the conversion: Sighting in, Display out.
  *
  * Plain JS so the demo seeder, the backfill script and the app all share one
- * implementation. Every function takes an open node:sqlite handle.
+ * implementation. Every function takes an open libsql database handle.
  */
 
 /** Confidence after n independent crowd assertions. Never reaches 1.0. */

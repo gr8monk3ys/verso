@@ -14,6 +14,7 @@ import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import path from "node:path";
 import { openDb, transact, DB_PATH } from "./lib/db.mjs";
+import { isRemoteUrl } from "../src/lib/db/driver.mjs";
 import { slugify } from "../src/lib/text.mjs";
 import { seedDemo } from "./lib/demo.mjs";
 import { flagDuplicateQids } from "../src/lib/domain/reconciliation.mjs";
@@ -182,6 +183,15 @@ async function seedCatalogue(db) {
 
 async function main() {
   if (command === "reset") {
+    // reset means "delete the file and start over" — a local-file operation.
+    // Refuse against a remote URL rather than dropping a Turso database from a
+    // one-word command; Turso has its own tooling for that, deliberately.
+    if (isRemoteUrl(DB_PATH)) {
+      console.error(
+        `reset only works on a local database. VERSO_DATABASE_URL points at a remote server (${DB_PATH}); use the Turso CLI to reset it.`,
+      );
+      process.exit(1);
+    }
     for (const suffix of ["", "-wal", "-shm"]) {
       const file = `${DB_PATH}${suffix}`;
       if (existsSync(file)) rmSync(file);

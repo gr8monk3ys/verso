@@ -25,12 +25,18 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // node:sqlite is a Node builtin; keep it out of the bundler's hands.
-  serverExternalPackages: ["node:sqlite"],
+  // libsql is a native addon; the bundler must not try to inline it.
+  serverExternalPackages: ["libsql"],
   // Without this, Next infers the workspace root by walking up for lockfiles
   // and can land on one in the home directory — which silently changes what
   // file tracing includes in a production build.
   outputFileTracingRoot: __dirname,
+  // schema.sql is read from disk at runtime (src/lib/db/index.ts), and file
+  // tracing does not follow a readFileSync of a .sql path. Without this it is
+  // absent from the serverless bundle and the first request 500s on ENOENT.
+  outputFileTracingIncludes: {
+    "/**": ["./src/lib/db/schema.sql"],
+  },
   poweredByHeader: false,
   experimental: {
     // Sightings can carry a user photo; keep the server action limit generous.

@@ -6,7 +6,7 @@
  * bundler or a running server. The TypeScript layer in sightings.ts is a thin
  * typed wrapper over these functions.
  *
- * Every function takes an open node:sqlite handle.
+ * Every function takes an open libsql database handle.
  */
 
 import { assertDisplay } from "./display.mjs";

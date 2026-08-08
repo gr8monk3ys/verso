@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import { del as blobDelete, get as blobGet, put as blobPut } from "@vercel/blob";
 
 /**
  * User photographs attached to a sighting.
@@ -15,16 +16,26 @@ import path from "node:path";
  * catalogue images in §10.5: the user made this one, it sits on their own
  * sighting, and it is never presented as the museum's reproduction.
  *
- * Storage is the local filesystem under VERSO_MEDIA_DIR, served back through a
- * route handler rather than from public/. That keeps uploads out of the build
- * output and survives a redeploy. The route is the one authorisation point:
- * photographs inherit the visibility of the sighting that owns them, because a
- * random filename is a secret that only has to leak once, and these URLs are
- * served immutable.
+ * Two backends behind one seam, chosen by where Verso is running:
+ *
+ *   filesystem   (default) — a directory under VERSO_MEDIA_DIR. Correct for the
+ *                one-box deploy, and what the tests and dev use.
+ *   Vercel Blob  when BLOB_READ_WRITE_TOKEN is set — the serverless path, where
+ *                the local filesystem is ephemeral and per-instance.
+ *
+ * The security model is identical in both and does not depend on the backend:
+ * the stored value is an opaque key, and the /api/media route is the one
+ * authorisation point — it checks that the caller may see the owning sighting
+ * *before* asking the backend for bytes. So blobs are stored **private**: the
+ * URL alone grants nothing, and a leaked key cannot bypass the visibility check
+ * the way a public blob URL would. A random filename is not a secret we rely on.
  */
 
 const MEDIA_DIR = process.env.VERSO_MEDIA_DIR ?? path.join(process.cwd(), "data", "media");
 const MAX_BYTES = 8 * 1024 * 1024;
+
+/** Vercel sets BLOB_READ_WRITE_TOKEN when a Blob store is attached to the project. */
+const USE_BLOB = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 
 /** Magic bytes, because a Content-Type header is a claim, not evidence. */
 const SIGNATURES: { ext: string; mime: string; test: (bytes: Uint8Array) => boolean }[] = [
@@ -74,9 +85,21 @@ export async function saveSightingPhoto(file: File | null): Promise<SavedPhoto |
   const name = `${randomUUID()}.${kind.ext}`;
   const relative = `${folder}/${name}`;
 
+  if (USE_BLOB) {
+    // Private: the key is stored on the sighting and only ever served through
+    // the authorising route. addRandomSuffix is off because the UUID already
+    // makes the key unique and we want the stored key to be exactly what we
+    // read back.
+    await blobPut(relative, Buffer.from(bytes), {
+      access: "private",
+      contentType: kind.mime,
+      addRandomSuffix: false,
+    });
+    return { path: relative };
+  }
+
   await mkdir(path.join(MEDIA_DIR, folder), { recursive: true });
   await writeFile(path.join(MEDIA_DIR, relative), bytes);
-
   return { path: relative };
 }
 
@@ -88,6 +111,21 @@ export async function saveSightingPhoto(file: File | null): Promise<SavedPhoto |
 export async function readMedia(
   relative: string,
 ): Promise<{ bytes: Buffer; mime: string } | null> {
+  if (USE_BLOB) {
+    try {
+      const result = await blobGet(relative, { access: "private" });
+      if (!result) return null;
+      const bytes = Buffer.from(await new Response(result.stream).arrayBuffer());
+      const kind = detectImage(new Uint8Array(bytes.subarray(0, 16)));
+      // Sniff the bytes the same as the filesystem path: a stored key that no
+      // longer points at a real image is served to nobody.
+      if (!kind) return null;
+      return { bytes, mime: kind.mime };
+    } catch {
+      return null;
+    }
+  }
+
   const target = path.resolve(MEDIA_DIR, relative);
   const root = path.resolve(MEDIA_DIR);
   if (target !== root && !target.startsWith(root + path.sep)) return null;
@@ -108,6 +146,15 @@ export async function readMedia(
  * Missing files are not an error — deletion is meant to be idempotent.
  */
 export async function deleteMedia(relative: string): Promise<void> {
+  if (USE_BLOB) {
+    try {
+      await blobDelete(relative);
+    } catch {
+      // Already gone, or never written. Deletion is idempotent.
+    }
+    return;
+  }
+
   const target = path.resolve(MEDIA_DIR, relative);
   const root = path.resolve(MEDIA_DIR);
   if (target !== root && !target.startsWith(root + path.sep)) return;

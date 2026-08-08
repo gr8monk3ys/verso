@@ -16,7 +16,7 @@
 
 import { accessSync, constants, existsSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { isRemoteUrl, openDatabase } from "../src/lib/db/driver.mjs";
 import { checkAll, summarise } from "./lib/preflight.mjs";
 import { sendMail } from "../src/lib/mailer.mjs";
 
@@ -42,17 +42,20 @@ function readState() {
   const evalFile = path.join("data", "eval", "reconciliation.json");
   state.guardrailMeasured = existsSync(evalFile);
 
-  const dbPath = process.env.VERSO_DB_PATH ?? path.join("data", "verso.db");
-  if (existsSync(dbPath)) {
+  // The dataset marker lives in the database — remote (Turso) or local file.
+  // A remote URL is always "present"; a local file has to exist first.
+  const target =
+    process.env.VERSO_DATABASE_URL ?? process.env.VERSO_DB_PATH ?? path.join("data", "verso.db");
+  if (isRemoteUrl(target) || existsSync(target)) {
     try {
-      const db = new DatabaseSync(dbPath, { readOnly: true });
+      const db = openDatabase(target, { readonly: true });
       try {
         state.dataset = db.prepare("SELECT value FROM meta WHERE key = 'dataset'").get()?.value ?? null;
       } finally {
         db.close();
       }
     } catch {
-      // No meta table yet, or an unreadable file — the database check covers that.
+      // No meta table yet, or an unreachable database — the database check covers that.
     }
   }
   return state;

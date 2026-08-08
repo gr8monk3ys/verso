@@ -22,7 +22,7 @@ import { slugify } from "../text.mjs";
 import { normalizeName, resolveArtists, ulanId } from "./artist-identity.mjs";
 
 /**
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('libsql').Database} db
  * @param {{dates?: Record<string, {born: number|null, died: number|null}>}} [enrichment]
  *   Life dates keyed by QID — the checked-in sidecar from
  *   scripts/ingest/artist-dates.mjs. A sidecar because this table is derived:
