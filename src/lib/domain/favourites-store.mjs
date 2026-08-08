@@ -29,7 +29,7 @@
 export const MAX_FAVOURITES = 4;
 
 /**
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('libsql').Database} db
  * @param {{userId: number, workId: number}} input
  * @returns {{ok: true, position: number} | {ok: false, reason: 'unseen' | 'full'}}
  *   `unseen` and `full` are both recoverable states the caller must be able to
@@ -66,7 +66,7 @@ export function addFavourite(db, { userId, workId }) {
 /**
  * Remove, then close the gap.
  *
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('libsql').Database} db
  * @param {{userId: number, workId: number}} input
  * @returns {boolean} whether anything was removed
  */
@@ -86,7 +86,7 @@ export function removeFavourite(db, { userId, workId }) {
  * favourite leaves a favourite you have not seen — exactly the state rule 1
  * exists to prevent, arrived at through the back door.
  *
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('libsql').Database} db
  * @param {number} userId
  * @returns {number} how many were dropped
  */

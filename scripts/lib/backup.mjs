@@ -31,7 +31,7 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promi
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
-import { DatabaseSync } from "node:sqlite";
+import Database from "libsql";
 
 /** Tables whose row counts a restore is checked against. */
 const COUNTED = [
@@ -92,7 +92,7 @@ export async function createBackup({
   await mkdir(dir, { recursive: true });
 
   const snapshot = path.join(dir, "verso.db");
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const db = new Database(dbPath, { readonly: true });
   let counts;
   try {
     counts = countRows(db);
@@ -105,7 +105,7 @@ export async function createBackup({
   }
 
   // Prove the snapshot is a working database before calling it a backup.
-  const verify = new DatabaseSync(snapshot, { readOnly: true });
+  const verify = new Database(snapshot, { readonly: true });
   let integrity;
   try {
     integrity = verify.prepare("PRAGMA integrity_check").get().integrity_check;
@@ -229,7 +229,7 @@ export async function restoreBackup({ backupDir, dbPath, mediaDir = null, force 
 
   // Confirm what landed matches what was promised, rather than reporting success
   // because no exception was thrown.
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const db = new Database(dbPath, { readonly: true });
   let counts;
   try {
     counts = countRows(db);

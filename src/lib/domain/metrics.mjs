@@ -58,7 +58,7 @@ function share(part, whole) {
 }
 
 /**
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('libsql').Database} db
  * @param {{windowDays?: number, catalogueEval?: {precision: number|null,
  *          sampled: number, generatedAt: string, source: string} | null}} options
  *   catalogueEval is the summary written by scripts/eval-reconciliation.mjs.

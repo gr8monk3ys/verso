@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import Database from "libsql";
 import { applySchema } from "../src/lib/db/migrate.mjs";
 import { createBackup, prune, restoreBackup, stampFor, verifyBackup } from "../scripts/lib/backup.mjs";
 
@@ -14,7 +14,7 @@ const SCHEMA = await readFile(path.join("src", "lib", "db", "schema.sql"), "utf8
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "verso-backup-"));
   const dbPath = path.join(root, "verso.db");
-  const db = new DatabaseSync(dbPath);
+  const db = new Database(dbPath);
   applySchema(db, SCHEMA);
   db.prepare(
     "INSERT INTO users (handle, display_name, password_hash) VALUES ('priya','Priya','x')",
@@ -58,7 +58,7 @@ test("a backup round-trips: restore reproduces every row and file", async (t) =>
   assert.ok(existsSync(path.join(into, "media", "2026", "07", "photo.jpg")));
 
   // And the restored file is a working database, not just bytes on disk.
-  const db = new DatabaseSync(path.join(into, "verso.db"), { readOnly: true });
+  const db = new Database(path.join(into, "verso.db"), { readonly: true });
   const seen = db.prepare("SELECT COUNT(*) AS n FROM sightings WHERE user_id = 1").get().n;
   db.close();
   assert.equal(seen, 2);
@@ -70,7 +70,7 @@ test("a snapshot taken while the database has uncommitted WAL content is still c
   const fx = await fixture();
   t.after(() => rm(fx.root, { recursive: true, force: true }));
 
-  const live = new DatabaseSync(fx.dbPath);
+  const live = new Database(fx.dbPath);
   live.prepare("INSERT INTO works (slug, title) VALUES ('c','C')").run();
   // Deliberately leave the connection open, so WAL has not been checkpointed.
   const { manifest } = await createBackup({ ...fx });
@@ -98,7 +98,7 @@ test("a corrupted snapshot is refused rather than restored over a live database"
   );
 
   // The database that was there is untouched.
-  const db = new DatabaseSync(fx.dbPath, { readOnly: true });
+  const db = new Database(fx.dbPath, { readonly: true });
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sightings").get().n, 2);
   db.close();
 });

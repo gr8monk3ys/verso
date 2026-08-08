@@ -19,7 +19,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import Database from "libsql";
 
 const SPARQL_ENDPOINT = "https://query.wikidata.org/sparql";
 const USER_AGENT =
@@ -81,7 +81,7 @@ async function fetchBatch(qids) {
   return dates;
 }
 
-const db = new DatabaseSync(DB_PATH);
+const db = new Database(DB_PATH);
 const qids = db
   .prepare("SELECT qid FROM artists WHERE qid IS NOT NULL ORDER BY qid")
   .all()

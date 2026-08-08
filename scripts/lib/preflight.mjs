@@ -99,24 +99,63 @@ export function checkAll(env, fsProbe, state = {}) {
   }
 
   // ---------------------------------------------------------------- data ---
-  const dbPath = env.VERSO_DB_PATH ?? "data/verso.db";
-  if (!fsProbe.exists(dbPath)) {
-    add("database", "fail", `no database at ${dbPath}`, "npm run db:reset && npm run db:seed");
-  } else if (!fsProbe.writable(dbPath)) {
-    add("database", "fail", `${dbPath} is not writable`, "fix ownership on the data directory");
+  const remoteDb = /^(libsql|https?|wss?):\/\//.test(env.VERSO_DATABASE_URL ?? "");
+  const onServerless = Boolean(env.VERCEL);
+
+  if (remoteDb) {
+    // A remote libSQL/Turso database: nothing on the local disk to probe, and
+    // a managed server is durable by construction.
+    add(
+      "database",
+      env.VERSO_DATABASE_AUTH_TOKEN ? "pass" : production ? "fail" : "warn",
+      env.VERSO_DATABASE_AUTH_TOKEN
+        ? `remote → ${hostOf(env.VERSO_DATABASE_URL)}`
+        : "VERSO_DATABASE_URL is remote but VERSO_DATABASE_AUTH_TOKEN is unset",
+      "set VERSO_DATABASE_AUTH_TOKEN to the Turso database token",
+    );
+  } else if (onServerless) {
+    // The one that silently loses everything: a local-file database on a host
+    // whose filesystem is ephemeral and per-instance. Every write is lost on
+    // the next cold start, and two instances never see each other's data.
+    add(
+      "database",
+      "fail",
+      "running on a serverless host with a local-file database — writes are ephemeral and per-instance",
+      "provision a Turso database and set VERSO_DATABASE_URL + VERSO_DATABASE_AUTH_TOKEN",
+    );
   } else {
-    add("database", "pass", dbPath);
+    const dbPath = env.VERSO_DB_PATH ?? "data/verso.db";
+    if (!fsProbe.exists(dbPath)) {
+      add("database", "fail", `no database at ${dbPath}`, "npm run db:reset && npm run db:seed");
+    } else if (!fsProbe.writable(dbPath)) {
+      add("database", "fail", `${dbPath} is not writable`, "fix ownership on the data directory");
+    } else {
+      add("database", "pass", dbPath);
+    }
   }
 
-  const mediaDir = env.VERSO_MEDIA_DIR ?? "data/media";
-  add(
-    "media dir",
-    fsProbe.writable(mediaDir) ? "pass" : production ? "fail" : "warn",
-    fsProbe.writable(mediaDir)
-      ? mediaDir
-      : `${mediaDir} is not writable; photo uploads will fail`,
-    "create the directory and make it writable by the server user",
-  );
+  // Photos: Vercel Blob when its token is present, else the local media dir.
+  // On serverless the local dir is the same ephemeral trap as the database.
+  if (env.BLOB_READ_WRITE_TOKEN) {
+    add("media", "pass", "Vercel Blob (private)");
+  } else if (onServerless) {
+    add(
+      "media",
+      "fail",
+      "serverless host with local-disk photo storage — uploads vanish on redeploy",
+      "attach a Vercel Blob store (sets BLOB_READ_WRITE_TOKEN)",
+    );
+  } else {
+    const mediaDir = env.VERSO_MEDIA_DIR ?? "data/media";
+    add(
+      "media dir",
+      fsProbe.writable(mediaDir) ? "pass" : production ? "fail" : "warn",
+      fsProbe.writable(mediaDir)
+        ? mediaDir
+        : `${mediaDir} is not writable; photo uploads will fail`,
+      "create the directory and make it writable by the server user",
+    );
+  }
 
   if (state.dataset === "demo") {
     add(

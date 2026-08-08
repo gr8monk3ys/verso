@@ -55,7 +55,7 @@ export default async function WorkPage({
   const inLists = listsFeaturingWork(work.id);
   const venues = activeVenues().map((venue) => ({ id: venue.id, name: venue.name }));
   const logVenueId = display?.venue_id ?? work.home_venue_id ?? null;
-  // Mapped to fresh objects, same as venues above: node:sqlite rows are
+  // Mapped to fresh objects, same as venues above: libsql rows are plain objects, but keeping this explicit map is
   // null-prototype, which a client component prop refuses to serialize.
   const openShows = logVenueId
     ? openExhibitionsAt(logVenueId).map((show) => ({ id: show.id, title: show.title }))

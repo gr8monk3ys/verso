@@ -24,9 +24,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Node 24: node:sqlite is stable and `next start` needs no flags —
-          # on 22 the scripts pass --experimental-sqlite but the server itself
-          # cannot, so 24 is the honest floor (package.json engines agrees).
+          # Node 24 — Vercel's default. The database is libsql (a native addon,
+          # no experimental flag), so the floor is really just "modern LTS".
           node-version: "24"
           cache: npm
 

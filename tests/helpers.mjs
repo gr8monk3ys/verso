@@ -1,13 +1,13 @@
-import { DatabaseSync } from "node:sqlite";
+import Database from "libsql";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { applySchema } from "../src/lib/db/migrate.mjs";
 
 const SCHEMA = readFileSync(path.join("src", "lib", "db", "schema.sql"), "utf8");
 
-/** A fresh in-memory database with the real schema. */
+/** A fresh in-memory database with the real schema, on the production driver. */
 export function testDb() {
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
   applySchema(db, SCHEMA);
   return db;
 }
