@@ -15,7 +15,7 @@ RUN npm run build && npm prune --omit=dev \
 
 FROM node:24-alpine
 ENV NODE_ENV=production \
-    VERSO_DB_PATH=/var/lib/verso/verso.db \
+    VERSO_PGLITE_PATH=/var/lib/verso/pgdata \
     VERSO_MEDIA_DIR=/var/lib/verso/media
 WORKDIR /srv/verso
 COPY --from=build /srv/verso ./

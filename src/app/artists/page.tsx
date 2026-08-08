@@ -32,9 +32,9 @@ export default async function ArtistsPage({
   const { page: pageParam } = await searchParams;
   const page = Math.max(0, Number(pageParam ?? 0) || 0);
   const PAGE = 120;
-  const total = browseArtistCount();
-  const artists = browseArtists({ limit: PAGE, offset: page * PAGE });
-  const featured = page === 0 ? mostRepresentedArtists() : [];
+  const total = await browseArtistCount();
+  const artists = await browseArtists({ limit: PAGE, offset: page * PAGE });
+  const featured = page === 0 ? await mostRepresentedArtists() : [];
 
   return (
     <div className="pb-10">

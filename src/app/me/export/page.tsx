@@ -9,7 +9,7 @@ export default async function ExportPage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const rows = exportRows(user.id);
+  const rows = await exportRows(user.id);
   const reconciled = rows.filter((row) => row.wikidata_qid).length;
 
   return (

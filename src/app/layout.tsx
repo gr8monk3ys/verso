@@ -42,8 +42,8 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
-  const unread = user ? unreadNotificationCount(user.id) : 0;
-  const unrated = user ? unratedCount(user.id) : 0;
+  const unread = user ? await unreadNotificationCount(user.id) : 0;
+  const unrated = user ? await unratedCount(user.id) : 0;
 
   return (
     <html lang="en">

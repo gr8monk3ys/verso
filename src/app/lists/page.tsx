@@ -25,7 +25,8 @@ export default async function ListsPage({
   const { page: pageParam } = await searchParams;
   const page = Math.max(0, Number(pageParam ?? 0) || 0);
   const PAGE = 20;
-  const lists = publicLists(PAGE, page * PAGE);
+  const lists = await publicLists(PAGE, page * PAGE);
+  const previews = await Promise.all(lists.map((list) => listPreviewWorks(list.id)));
   const user = await currentUser();
 
   return (
@@ -51,8 +52,8 @@ export default async function ListsPage({
         </p>
       ) : (
         <ul className="divide-y divide-[var(--color-line)]">
-          {lists.map((list) => {
-            const preview = listPreviewWorks(list.id);
+          {lists.map((list, index) => {
+            const preview = previews[index];
             return (
               <li key={list.id} className="flex items-start gap-4 py-4">
                 <Link

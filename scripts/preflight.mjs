@@ -37,22 +37,22 @@ function writable(target) {
 }
 
 /** Read the two bits of state the checks need, without importing the app. */
-function readState() {
+async function readState() {
   const state = { dataset: null, guardrailMeasured: false };
   const evalFile = path.join("data", "eval", "reconciliation.json");
   state.guardrailMeasured = existsSync(evalFile);
 
-  // The dataset marker lives in the database — remote (Turso) or local file.
-  // A remote URL is always "present"; a local file has to exist first.
+  // The dataset marker lives in the database — remote (Neon) or a local PGlite
+  // store. A remote URL is always "present"; a local store has to exist first.
   const target =
-    process.env.VERSO_DATABASE_URL ?? process.env.VERSO_DB_PATH ?? path.join("data", "verso.db");
+    process.env.DATABASE_URL ?? process.env.VERSO_PGLITE_PATH ?? path.join("data", "pgdata");
   if (isRemoteUrl(target) || existsSync(target)) {
     try {
-      const db = openDatabase(target, { readonly: true });
+      const db = await openDatabase(target);
       try {
-        state.dataset = db.prepare("SELECT value FROM meta WHERE key = 'dataset'").get()?.value ?? null;
+        state.dataset = (await db.prepare("SELECT value FROM meta WHERE key = 'dataset'").get())?.value ?? null;
       } finally {
-        db.close();
+        await db.close();
       }
     } catch {
       // No meta table yet, or an unreachable database — the database check covers that.
@@ -61,7 +61,7 @@ function readState() {
   return state;
 }
 
-const state = readState();
+const state = await readState();
 const checks = checkAll(process.env, { exists: existsSync, writable }, state);
 const totals = summarise(checks);
 

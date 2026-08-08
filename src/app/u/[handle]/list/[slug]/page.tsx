@@ -15,10 +15,10 @@ export default async function ListPage({
   params: Promise<{ handle: string; slug: string }>;
 }) {
   const { handle, slug } = await params;
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile) notFound();
 
-  const list = listBySlug(profile.id, slug);
+  const list = await listBySlug(profile.id, slug);
   if (!list) notFound();
 
   const viewer = await currentUser();
@@ -27,7 +27,7 @@ export default async function ListPage({
   // account is still behind the account.
   if ((profile.is_private || !list.is_public) && !isSelf) notFound();
 
-  const items = listItems(list.id);
+  const items = await listItems(list.id);
   const path = `/u/${handle}/list/${slug}`;
 
   return (

@@ -20,8 +20,8 @@ export type Artist = {
   work_count: number;
 };
 
-export function artistBySlug(slug: string): Artist | undefined {
-  return get<Artist>("SELECT * FROM artists WHERE slug = ?", slug);
+export async function artistBySlug(slug: string): Promise<Artist | undefined> {
+  return await get<Artist>("SELECT * FROM artists WHERE slug = ?", slug);
 }
 
 /**
@@ -33,8 +33,8 @@ export function artistBySlug(slug: string): Artist | undefined {
  * works" is noise in a diary even though it would interest a curator. Returns an
  * array because the schema permits co-credits and a second source may assert them.
  */
-export function artistsForWork(workId: number): Artist[] {
-  return all<Artist>(
+export async function artistsForWork(workId: number): Promise<Artist[]> {
+  return await all<Artist>(
     `SELECT a.* FROM artists a
        JOIN work_artists wa ON wa.artist_id = a.id
       WHERE wa.work_id = ?
@@ -57,15 +57,15 @@ export type ArtistWork = WorkCard & {
  * for an oeuvre — the point is "which of these do people stop at", and a date
  * ordering buries the famous one behind thirty studies.
  */
-export function worksByArtist(
+export async function worksByArtist(
   artistId: number,
   viewerId: number | null,
   options: { limit?: number; offset?: number } = {},
-): ArtistWork[] {
+): Promise<ArtistWork[]> {
   // The largest oeuvre on view is 98 works, so a whole artist fits in one
   // page; the cap only exists so a future ingest cannot render ten thousand.
   const { limit = 200, offset = 0 } = options;
-  return all<ArtistWork>(
+  return await all<ArtistWork>(
     `SELECT w.*,
             (SELECT COUNT(*) FROM sightings s
               WHERE s.work_id = w.id AND s.is_private = 0) AS log_count,
@@ -94,20 +94,20 @@ export function worksByArtist(
  * trivia. Counts distinct works, not sightings — seeing the same Degas four times
  * is four sightings and one work.
  */
-export function artistProgress(artistId: number, viewerId: number | null) {
-  const total = get<{ n: number }>(
+export async function artistProgress(artistId: number, viewerId: number | null) {
+  const total = (await get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM work_artists WHERE artist_id = ?",
     artistId,
-  )!.n;
+  ))!.n;
   if (!viewerId) return { total, seen: 0 };
 
-  const seen = get<{ n: number }>(
+  const seen = (await get<{ n: number }>(
     `SELECT COUNT(DISTINCT s.work_id) AS n
        FROM sightings s JOIN work_artists wa ON wa.work_id = s.work_id
       WHERE wa.artist_id = ? AND s.user_id = ?`,
     artistId,
     viewerId,
-  )!.n;
+  ))!.n;
   return { total, seen };
 }
 
@@ -118,8 +118,8 @@ export type ArtistRatingSummary = {
 };
 
 /** Aggregate rating across everything the artist made, shaped like a work's. */
-export function artistRatingSummary(artistId: number): ArtistRatingSummary {
-  const rows = all<{ rating: number; n: number }>(
+export async function artistRatingSummary(artistId: number): Promise<ArtistRatingSummary> {
+  const rows = await all<{ rating: number; n: number }>(
     `SELECT s.rating, COUNT(*) AS n
        FROM sightings s JOIN work_artists wa ON wa.work_id = s.work_id
       WHERE wa.artist_id = ? AND s.rating IS NOT NULL AND s.is_private = 0
@@ -149,8 +149,8 @@ export type ArtistReview = {
 };
 
 /** Popular reviews across the artist's works — the film-page pattern, widened. */
-export function reviewsForArtist(artistId: number, limit = 6): ArtistReview[] {
-  return all<ArtistReview>(
+export async function reviewsForArtist(artistId: number, limit = 6): Promise<ArtistReview[]> {
+  return await all<ArtistReview>(
     `SELECT s.id, s.review, s.rating, s.seen_on,
             u.handle, u.display_name,
             w.title AS work_title, w.slug AS work_slug,
@@ -176,9 +176,9 @@ export function reviewsForArtist(artistId: number, limit = 6): ArtistReview[] {
  * thousand-row list of names with one object each is a phone book, not a
  * discovery surface.
  */
-export function browseArtists(options: { limit?: number; offset?: number } = {}) {
+export async function browseArtists(options: { limit?: number; offset?: number } = {}) {
   const { limit = 120, offset = 0 } = options;
-  return all<Artist>(
+  return await all<Artist>(
     `SELECT * FROM artists
       WHERE work_count > 1
       ORDER BY sort_name, id
@@ -188,22 +188,22 @@ export function browseArtists(options: { limit?: number; offset?: number } = {})
   );
 }
 
-export function browseArtistCount(): number {
-  return get<{ n: number }>("SELECT COUNT(*) AS n FROM artists WHERE work_count > 1")!.n;
+export async function browseArtistCount(): Promise<number> {
+  return (await get<{ n: number }>("SELECT COUNT(*) AS n FROM artists WHERE work_count > 1"))!.n;
 }
 
 /** The wall of names people actually come for: largest bodies of work first. */
-export function mostRepresentedArtists(limit = 12): Artist[] {
-  return all<Artist>(
+export async function mostRepresentedArtists(limit = 12): Promise<Artist[]> {
+  return await all<Artist>(
     "SELECT * FROM artists ORDER BY work_count DESC, sort_name LIMIT ?",
     limit,
   );
 }
 
 /** Artists matching a search term, for the catalogue search page. */
-export function searchArtists(query: string, limit = 5): Artist[] {
+export async function searchArtists(query: string, limit = 5): Promise<Artist[]> {
   const like = `%${query.trim().toLowerCase()}%`;
-  return all<Artist>(
+  return await all<Artist>(
     `SELECT * FROM artists
       WHERE lower(display_name) LIKE ? OR lower(sort_name) LIKE ?
       ORDER BY work_count DESC

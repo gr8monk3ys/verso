@@ -22,7 +22,7 @@ import { slugify } from "../text.mjs";
 import { normalizeName, resolveArtists, ulanId } from "./artist-identity.mjs";
 
 /**
- * @param {import('libsql').Database} db
+ * @param {any} db
  * @param {{dates?: Record<string, {born: number|null, died: number|null}>}} [enrichment]
  *   Life dates keyed by QID — the checked-in sidecar from
  *   scripts/ingest/artist-dates.mjs. A sidecar because this table is derived:
@@ -30,8 +30,8 @@ import { normalizeName, resolveArtists, ulanId } from "./artist-identity.mjs";
  *   the table would survive exactly until the next catalogue change.
  * @returns {{artists: number, works: number, joined: number, refused: string[]}}
  */
-export function buildArtists(db, { dates = {} } = {}) {
-  const rows = db
+export async function buildArtists(db, { dates = {} } = {}) {
+  const rows = await db
     .prepare(
       `SELECT id, artist_display, artist_qid, artist_ulan
          FROM works
@@ -43,14 +43,14 @@ export function buildArtists(db, { dates = {} } = {}) {
   const { artists, joined, refused } = resolveArtists(rows);
 
   // ON DELETE CASCADE clears work_artists with it.
-  db.exec("DELETE FROM artists");
+  await db.exec("DELETE FROM artists");
 
   const insertArtist = db.prepare(
     `INSERT INTO artists (slug, qid, display_name, sort_name, ulan, birth_year, death_year, work_count)
-     VALUES (?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?) RETURNING id`,
   );
   const link = db.prepare(
-    "INSERT OR IGNORE INTO work_artists (work_id, artist_id) VALUES (?, ?)",
+    "INSERT INTO work_artists (work_id, artist_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
   );
 
   // Deterministic order so a rebuild assigns the same slug to the same artist.
@@ -70,7 +70,7 @@ export function buildArtists(db, { dates = {} } = {}) {
     taken.add(slug);
 
     const lifeDates = artist.qid ? dates[artist.qid] : undefined;
-    const result = insertArtist.run(
+    const created = await insertArtist.get(
       slug,
       artist.qid,
       artist.displayName,
@@ -80,8 +80,8 @@ export function buildArtists(db, { dates = {} } = {}) {
       lifeDates?.died ?? null,
       artist.workIds.length,
     );
-    const artistId = Number(result.lastInsertRowid);
-    for (const workId of artist.workIds) link.run(workId, artistId);
+    const artistId = created.id;
+    for (const workId of artist.workIds) await link.run(workId, artistId);
   }
 
   return {

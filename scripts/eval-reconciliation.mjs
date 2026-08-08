@@ -71,7 +71,7 @@ function parseArgs(argv) {
  * operate on, and the label arm then reports zero for a structural reason rather
  * than a quality one. Both strata are sampled, and reported separately.
  */
-function sample(db, limit) {
+async function sample(db, limit) {
   const half = Math.max(1, Math.round(limit / 2));
   const rowsWhere = (attributed) =>
     db
@@ -97,9 +97,11 @@ function sample(db, limit) {
     return rows.filter((row) => row.rn % stride === 0).slice(0, want);
   };
 
+  const attributedRows = await rowsWhere(true);
+  const anonymousRows = await rowsWhere(false);
   return [
-    ...pick(rowsWhere(true), half).map((row) => ({ ...row, attributed: true })),
-    ...pick(rowsWhere(false), limit - half).map((row) => ({ ...row, attributed: false })),
+    ...pick(attributedRows, half).map((row) => ({ ...row, attributed: true })),
+    ...pick(anonymousRows, limit - half).map((row) => ({ ...row, attributed: false })),
   ];
 }
 
@@ -219,9 +221,9 @@ async function run() {
     throw new Error(`no cached candidates at ${cacheFile} — run a live eval first`);
   }
 
-  const db = openDb();
-  const works = sample(db, args.limit);
-  db.close();
+  const db = await openDb();
+  const works = await sample(db, args.limit);
+  await db.close();
 
   const provider = args.replay ? null : wikidataProvider({ sleepMs: args.sleep });
   const tallies = Object.fromEntries(arms.map((arm) => [arm, blankTally()]));

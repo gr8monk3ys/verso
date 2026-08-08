@@ -41,31 +41,31 @@ export default async function WorkPage({
 }) {
   const { slug } = await params;
   const { favourite: favouriteError } = await searchParams;
-  const work = workBySlug(slug);
+  const work = await workBySlug(slug);
   if (!work) notFound();
 
   const user = await currentUser();
-  const summary = ratingSummary(work.id);
-  const makers = artistsForWork(work.id);
-  const display = whereIsIt(work.id);
-  const reviews = popularReviews(work.id, 8);
-  const recent = recentSightingsForWork(work.id, 8);
-  const tags = topTagsForWork(work.id);
-  const related = relatedWorks(work, 6);
-  const inLists = listsFeaturingWork(work.id);
-  const venues = activeVenues().map((venue) => ({ id: venue.id, name: venue.name }));
+  const summary = await ratingSummary(work.id);
+  const makers = await artistsForWork(work.id);
+  const display = await whereIsIt(work.id);
+  const reviews = await popularReviews(work.id, 8);
+  const recent = await recentSightingsForWork(work.id, 8);
+  const tags = await topTagsForWork(work.id);
+  const related = await relatedWorks(work, 6);
+  const inLists = await listsFeaturingWork(work.id);
+  const venues = (await activeVenues()).map((venue) => ({ id: venue.id, name: venue.name }));
   const logVenueId = display?.venue_id ?? work.home_venue_id ?? null;
-  // Mapped to fresh objects, same as venues above: libsql rows are plain objects, but keeping this explicit map is
+  // Mapped to fresh objects, same as venues above: postgres rows are plain objects, but keeping this explicit map is
   // null-prototype, which a client component prop refuses to serialize.
   const openShows = logVenueId
-    ? openExhibitionsAt(logVenueId).map((show) => ({ id: show.id, title: show.title }))
+    ? (await openExhibitionsAt(logVenueId)).map((show) => ({ id: show.id, title: show.title }))
     : [];
-  const mine = user ? sightingsForUser(user.id, { workId: work.id, viewerId: user.id }) : [];
-  const watched = user ? isWatched(user.id, work.id) : false;
-  const favourited = user ? isFavourite(user.id, work.id) : false;
-  const favouritesFull = user ? favouriteCount(user.id) >= MAX_FAVOURITES : false;
-  const myLists = user ? listsForUser(user.id, user.id) : [];
-  const liked = user ? likedByUser(user.id, reviews.map((review) => review.id)) : new Set<number>();
+  const mine = user ? await sightingsForUser(user.id, { workId: work.id, viewerId: user.id }) : [];
+  const watched = user ? await isWatched(user.id, work.id) : false;
+  const favourited = user ? await isFavourite(user.id, work.id) : false;
+  const favouritesFull = user ? (await favouriteCount(user.id)) >= MAX_FAVOURITES : false;
+  const myLists = user ? await listsForUser(user.id, user.id) : [];
+  const liked = user ? await likedByUser(user.id, reviews.map((review) => review.id)) : new Set<number>();
   const path = `/work/${work.slug}`;
   const maxBar = Math.max(1, ...summary.distribution.map((bucket) => bucket.count));
 
@@ -403,7 +403,7 @@ export default async function WorkPage({
   );
 }
 
-function Comments({
+async function Comments({
   sightingId,
   path,
   canComment,
@@ -412,7 +412,7 @@ function Comments({
   path: string;
   canComment: boolean;
 }) {
-  const comments = commentsFor(sightingId);
+  const comments = await commentsFor(sightingId);
   if (!comments.length && !canComment) return null;
 
   return (

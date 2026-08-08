@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function ModerationPage() {
   await requireStaff();
 
-  const reports = all<{
+  const reports = await all<{
     id: number;
     subject_type: string;
     subject_id: number;
@@ -45,7 +45,7 @@ export default async function ModerationPage() {
       ORDER BY r.created_at`,
   );
 
-  const requests = all<{
+  const requests = await all<{
     id: number;
     title: string;
     artist: string;

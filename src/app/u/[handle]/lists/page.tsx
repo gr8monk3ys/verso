@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ListsPage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile) notFound();
 
   const viewer = await currentUser();
@@ -18,7 +18,7 @@ export default async function ListsPage({ params }: { params: Promise<{ handle: 
   // A list being marked public does not outrank its owner being private —
   // account privacy is the outer gate, the same rule the sitemap states.
   if (profile.is_private && !isSelf) notFound();
-  const lists = listsForUser(profile.id, viewer?.id ?? null);
+  const lists = await listsForUser(profile.id, viewer?.id ?? null);
 
   return (
     <div className="pb-10">

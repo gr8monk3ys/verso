@@ -21,15 +21,15 @@ export default async function ExhibitionPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const exhibition = exhibitionBySlug(slug);
+  const exhibition = await exhibitionBySlug(slug);
   if (!exhibition) notFound();
 
   const user = await currentUser();
-  const works = exhibitionWorks(exhibition.id);
-  const summary = exhibitionSummary(exhibition.id);
-  const sightings = sightingsForExhibition(exhibition.id, 20);
+  const works = await exhibitionWorks(exhibition.id);
+  const summary = await exhibitionSummary(exhibition.id);
+  const sightings = await sightingsForExhibition(exhibition.id, 20);
   const liked = user
-    ? likedByUser(user.id, sightings.map((sighting) => sighting.id))
+    ? await likedByUser(user.id, sightings.map((sighting) => sighting.id))
     : new Set<number>();
 
   // Three states, not two: real listings include announced shows that have not

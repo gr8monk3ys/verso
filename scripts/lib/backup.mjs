@@ -31,7 +31,7 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promi
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
-import Database from "libsql";
+import { openDatabase } from "../../src/lib/db/driver.mjs";
 
 /** Tables whose row counts a restore is checked against. */
 const COUNTED = [
@@ -52,11 +52,11 @@ export async function sha256(file) {
   return hash.digest("hex");
 }
 
-function countRows(db) {
+async function countRows(db) {
   const counts = {};
   for (const table of COUNTED) {
     try {
-      counts[table] = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
+      counts[table] = (await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()).n;
     } catch {
       // A backup taken against an older schema should not fail because a table
       // this version knows about did not exist yet.
@@ -92,25 +92,25 @@ export async function createBackup({
   await mkdir(dir, { recursive: true });
 
   const snapshot = path.join(dir, "verso.db");
-  const db = new Database(dbPath, { readonly: true });
+  const db = await openDatabase(dbPath);
   let counts;
   try {
-    counts = countRows(db);
+    counts = await countRows(db);
     // Parameters are not allowed in VACUUM INTO, so the path is interpolated.
     // It is operator-supplied rather than user-supplied, and a single quote in it
     // would break the statement rather than escape it — doubled to be safe.
-    db.exec(`VACUUM INTO '${snapshot.replace(/'/g, "''")}'`);
+    await db.exec(`VACUUM INTO '${snapshot.replace(/'/g, "''")}'`);
   } finally {
-    db.close();
+    await db.close();
   }
 
   // Prove the snapshot is a working database before calling it a backup.
-  const verify = new Database(snapshot, { readonly: true });
+  const verify = await openDatabase(snapshot);
   let integrity;
   try {
-    integrity = verify.prepare("PRAGMA integrity_check").get().integrity_check;
+    integrity = (await verify.prepare("PRAGMA integrity_check").get()).integrity_check;
   } finally {
-    verify.close();
+    await verify.close();
   }
   if (integrity !== "ok") throw new Error(`snapshot failed integrity_check: ${integrity}`);
 
@@ -229,12 +229,12 @@ export async function restoreBackup({ backupDir, dbPath, mediaDir = null, force 
 
   // Confirm what landed matches what was promised, rather than reporting success
   // because no exception was thrown.
-  const db = new Database(dbPath, { readonly: true });
+  const db = await openDatabase(dbPath);
   let counts;
   try {
-    counts = countRows(db);
+    counts = await countRows(db);
   } finally {
-    db.close();
+    await db.close();
   }
   const mismatched = Object.entries(manifest.counts)
     .filter(([table, expected]) => expected != null && counts[table] !== expected)

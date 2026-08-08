@@ -14,11 +14,11 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q") ?? "";
   const venueSlug = url.searchParams.get("venue");
-  const venue = venueSlug ? venueBySlug(venueSlug) : undefined;
+  const venue = venueSlug ? await venueBySlug(venueSlug) : undefined;
 
   if (url.searchParams.has("full")) {
     if (!venue) return NextResponse.json({ error: "unknown venue" }, { status: 404 });
-    const works = all<{
+    const works = await all<{
       id: number;
       slug: string;
       title: string;
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const results = searchWorks(query, {
+  const results = await searchWorks(query, {
     limit: Number(url.searchParams.get("limit") ?? 12),
     venueId: venue?.id ?? null,
     onViewOnly: url.searchParams.has("onview"),

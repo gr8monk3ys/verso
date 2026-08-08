@@ -3,39 +3,42 @@ import { all, db, get, run } from "@/lib/db";
 import { hiddenUserIds } from "@/lib/domain/moderation.mjs";
 import type { SightingCard } from "@/lib/domain/sightings";
 
-export function follow(followerId: number, followeeId: number) {
+/** Postgres equivalent of SQLite's datetime('now') — UTC, 'YYYY-MM-DD HH:MM:SS'. */
+const NOW = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')";
+
+export async function follow(followerId: number, followeeId: number) {
   if (followerId === followeeId) return;
-  run(
-    "INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)",
+  await run(
+    "INSERT INTO follows (follower_id, followee_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
     followerId,
     followeeId,
   );
 }
 
-export function unfollow(followerId: number, followeeId: number) {
-  run("DELETE FROM follows WHERE follower_id = ? AND followee_id = ?", followerId, followeeId);
+export async function unfollow(followerId: number, followeeId: number) {
+  await run("DELETE FROM follows WHERE follower_id = ? AND followee_id = ?", followerId, followeeId);
 }
 
-export function isFollowing(followerId: number, followeeId: number): boolean {
+export async function isFollowing(followerId: number, followeeId: number): Promise<boolean> {
   return Boolean(
-    get("SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?", followerId, followeeId),
+    await get("SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?", followerId, followeeId),
   );
 }
 
-export function followCounts(userId: number) {
+export async function followCounts(userId: number) {
   return {
-    following: get<{ n: number }>(
+    following: (await get<{ n: number }>(
       "SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?",
       userId,
-    )!.n,
-    followers: get<{ n: number }>(
+    ))!.n,
+    followers: (await get<{ n: number }>(
       "SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?",
       userId,
-    )!.n,
+    ))!.n,
   };
 }
 
-export function following(userId: number) {
+export async function following(userId: number) {
   return all<{ id: number; handle: string; display_name: string; bio: string }>(
     `SELECT u.id, u.handle, u.display_name, u.bio
        FROM follows f JOIN users u ON u.id = f.followee_id
@@ -44,7 +47,7 @@ export function following(userId: number) {
   );
 }
 
-export function followers(userId: number) {
+export async function followers(userId: number) {
   return all<{ id: number; handle: string; display_name: string; bio: string }>(
     `SELECT u.id, u.handle, u.display_name, u.bio
        FROM follows f JOIN users u ON u.id = f.follower_id
@@ -60,13 +63,13 @@ export function followers(userId: number) {
  * float above bare logs from the same visit: twelve "logged a work" rows in a
  * row is what an empty-feeling feed looks like even when the feed is full.
  */
-export function feedForUser(
+export async function feedForUser(
   userId: number,
   options: { limit?: number; offset?: number } = {},
-): SightingCard[] {
+): Promise<SightingCard[]> {
   const { limit = 30, offset = 0 } = options;
   // Blocking that leaves the blocked person in your feed is not blocking.
-  const hidden = hiddenUserIds(db(), userId) as number[];
+  const hidden = (await hiddenUserIds(await db(), userId)) as number[];
   const blockFilter = hidden.length
     ? `AND s.user_id NOT IN (${hidden.map(() => "?").join(",")})`
     : "";
@@ -78,14 +81,14 @@ export function feedForUser(
             u.handle, u.display_name,
             (SELECT COUNT(*) FROM likes l WHERE l.sighting_id = s.id) AS like_count,
             (SELECT COUNT(*) FROM comments c WHERE c.sighting_id = s.id) AS comment_count,
-            (SELECT group_concat(t.tag, ',') FROM sighting_tags t WHERE t.sighting_id = s.id) AS tags
+            (SELECT string_agg(t.tag::text, ',') FROM sighting_tags t WHERE t.sighting_id = s.id) AS tags
        FROM sightings s
        JOIN follows f ON f.followee_id = s.user_id AND f.follower_id = ?
        JOIN users u ON u.id = s.user_id
        JOIN works w ON w.id = s.work_id
        LEFT JOIN venues v ON v.id = s.venue_id
       WHERE s.is_private = 0 AND u.is_private = 0 ${blockFilter}
-      ORDER BY date(s.created_at) DESC,
+      ORDER BY s.created_at::date DESC,
                (s.review IS NOT NULL AND trim(s.review) <> '') DESC,
                (s.rating IS NOT NULL) DESC,
                s.created_at DESC
@@ -98,7 +101,7 @@ export function feedForUser(
 }
 
 /** Who to follow: people who log the works you log. */
-export function suggestedUsers(userId: number, limit = 5) {
+export async function suggestedUsers(userId: number, limit = 5) {
   return all<{ id: number; handle: string; display_name: string; bio: string; overlap: number }>(
     `SELECT u.id, u.handle, u.display_name, u.bio, COUNT(DISTINCT s.work_id) AS overlap
        FROM sightings s
@@ -122,25 +125,25 @@ export function suggestedUsers(userId: number, limit = 5) {
   );
 }
 
-export function toggleLike(userId: number, sightingId: number): boolean {
-  const existing = get(
+export async function toggleLike(userId: number, sightingId: number): Promise<boolean> {
+  const existing = await get(
     "SELECT 1 FROM likes WHERE user_id = ? AND sighting_id = ?",
     userId,
     sightingId,
   );
   if (existing) {
-    run("DELETE FROM likes WHERE user_id = ? AND sighting_id = ?", userId, sightingId);
+    await run("DELETE FROM likes WHERE user_id = ? AND sighting_id = ?", userId, sightingId);
     return false;
   }
-  run("INSERT INTO likes (user_id, sighting_id) VALUES (?, ?)", userId, sightingId);
-  const owner = get<{ user_id: number; work_title: string; work_slug: string }>(
+  await run("INSERT INTO likes (user_id, sighting_id) VALUES (?, ?)", userId, sightingId);
+  const owner = await get<{ user_id: number; work_title: string; work_slug: string }>(
     `SELECT s.user_id, w.title AS work_title, w.slug AS work_slug
        FROM sightings s JOIN works w ON w.id = s.work_id WHERE s.id = ?`,
     sightingId,
   );
-  const actor = get<{ handle: string }>("SELECT handle FROM users WHERE id = ?", userId);
+  const actor = await get<{ handle: string }>("SELECT handle FROM users WHERE id = ?", userId);
   if (owner && actor && owner.user_id !== userId) {
-    run(
+    await run(
       "INSERT INTO notifications (user_id, kind, body, href) VALUES (?, 'like', ?, ?)",
       owner.user_id,
       `@${actor.handle} liked your review of ${owner.work_title}.`,
@@ -150,10 +153,10 @@ export function toggleLike(userId: number, sightingId: number): boolean {
   return true;
 }
 
-export function likedByUser(userId: number, sightingIds: number[]): Set<number> {
+export async function likedByUser(userId: number, sightingIds: number[]): Promise<Set<number>> {
   if (!sightingIds.length) return new Set();
   const placeholders = sightingIds.map(() => "?").join(",");
-  const rows = all<{ sighting_id: number }>(
+  const rows = await all<{ sighting_id: number }>(
     `SELECT sighting_id FROM likes WHERE user_id = ? AND sighting_id IN (${placeholders})`,
     userId,
     ...sightingIds,
@@ -161,18 +164,18 @@ export function likedByUser(userId: number, sightingIds: number[]): Set<number> 
   return new Set(rows.map((row) => row.sighting_id));
 }
 
-export function addComment(userId: number, sightingId: number, body: string) {
+export async function addComment(userId: number, sightingId: number, body: string) {
   const text = body.trim().slice(0, 2000);
   if (!text) return;
-  run("INSERT INTO comments (sighting_id, user_id, body) VALUES (?, ?, ?)", sightingId, userId, text);
-  const owner = get<{ user_id: number; work_slug: string }>(
+  await run("INSERT INTO comments (sighting_id, user_id, body) VALUES (?, ?, ?)", sightingId, userId, text);
+  const owner = await get<{ user_id: number; work_slug: string }>(
     `SELECT s.user_id, w.slug AS work_slug FROM sightings s
        JOIN works w ON w.id = s.work_id WHERE s.id = ?`,
     sightingId,
   );
-  const actor = get<{ handle: string }>("SELECT handle FROM users WHERE id = ?", userId);
+  const actor = await get<{ handle: string }>("SELECT handle FROM users WHERE id = ?", userId);
   if (owner && actor && owner.user_id !== userId) {
-    run(
+    await run(
       "INSERT INTO notifications (user_id, kind, body, href) VALUES (?, 'comment', ?, ?)",
       owner.user_id,
       `@${actor.handle} commented on your review.`,
@@ -181,7 +184,7 @@ export function addComment(userId: number, sightingId: number, body: string) {
   }
 }
 
-export function commentsFor(sightingId: number) {
+export async function commentsFor(sightingId: number) {
   return all<{
     id: number;
     body: string;
@@ -196,7 +199,7 @@ export function commentsFor(sightingId: number) {
   );
 }
 
-export function notificationsFor(userId: number, limit = 30) {
+export async function notificationsFor(userId: number, limit = 30) {
   return all<{
     id: number;
     kind: string;
@@ -211,22 +214,22 @@ export function notificationsFor(userId: number, limit = 30) {
   );
 }
 
-export function unreadNotificationCount(userId: number): number {
-  return get<{ n: number }>(
+export async function unreadNotificationCount(userId: number): Promise<number> {
+  return (await get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL",
     userId,
-  )!.n;
+  ))!.n;
 }
 
-export function markNotificationsRead(userId: number) {
-  run(
-    "UPDATE notifications SET read_at = datetime('now') WHERE user_id = ? AND read_at IS NULL",
+export async function markNotificationsRead(userId: number) {
+  await run(
+    `UPDATE notifications SET read_at = ${NOW} WHERE user_id = ? AND read_at IS NULL`,
     userId,
   );
 }
 
-export function recordEvent(userId: number | null, kind: string, meta?: unknown) {
-  run(
+export async function recordEvent(userId: number | null, kind: string, meta?: unknown) {
+  await run(
     "INSERT INTO events (user_id, kind, meta) VALUES (?, ?, ?)",
     userId,
     kind,
@@ -243,25 +246,25 @@ export function recordEvent(userId: number | null, kind: string, meta?: unknown)
  * the server for it. Thirty minutes is the session boundary: coming back after
  * lunch is a second open, scrolling back up is not.
  */
-export function recordEventOncePerWindow(
+export async function recordEventOncePerWindow(
   userId: number,
   kind: string,
   windowMinutes = 30,
-): boolean {
-  const recent = get(
+): Promise<boolean> {
+  const recent = await get(
     `SELECT 1 FROM events
-      WHERE user_id = ? AND kind = ? AND at > datetime('now', ?)
+      WHERE user_id = ? AND kind = ? AND at > to_char((now() AT TIME ZONE 'utc') - make_interval(mins => ?), 'YYYY-MM-DD HH24:MI:SS')
       LIMIT 1`,
     userId,
     kind,
-    `-${windowMinutes} minutes`,
+    windowMinutes,
   );
   if (recent) return false;
-  recordEvent(userId, kind);
+  await recordEvent(userId, kind);
   return true;
 }
 
-export function userByHandle(handle: string) {
+export async function userByHandle(handle: string) {
   return get<{
     id: number;
     handle: string;

@@ -24,13 +24,13 @@ export default async function YearPage({
   const year = Number(yearParam);
   if (!Number.isInteger(year) || year < 1900 || year > 2200) notFound();
 
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile) notFound();
 
   const viewer = await currentUser();
   if (profile.is_private && viewer?.id !== profile.id) notFound();
 
-  const data = yearInArt(profile.id, year);
+  const data = await yearInArt(profile.id, year);
   const maxMonth = Math.max(1, ...data.byMonth.map((month) => month.n));
   const months = Array.from({ length: 12 }, (_, index) => {
     const key = String(index + 1).padStart(2, "0");

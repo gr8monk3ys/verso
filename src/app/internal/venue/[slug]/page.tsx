@@ -31,14 +31,14 @@ export default async function VenueDashboard({
 }) {
   await requireStaff();
   const { slug } = await params;
-  const venue = venueBySlug(slug);
+  const venue = await venueBySlug(slug);
   if (!venue) notFound();
 
-  const overview = venueOverview(db(), venue.id);
-  const works = attentionByWork(db(), venue.id, 30);
-  const rooms = attentionByRoom(db(), venue.id);
-  const overlooked = overlookedWorks(db(), venue.id, 12);
-  const weeks = visitsByWeek(db(), venue.id, 20);
+  const overview = await venueOverview(await db(), venue.id);
+  const works = await attentionByWork(await db(), venue.id, 30);
+  const rooms = await attentionByRoom(await db(), venue.id);
+  const overlooked = await overlookedWorks(await db(), venue.id, 12);
+  const weeks = await visitsByWeek(await db(), venue.id, 20);
   const maxWeek = Math.max(1, ...weeks.map((week) => week.sightings));
 
   return (

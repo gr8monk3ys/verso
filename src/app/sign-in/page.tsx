@@ -11,7 +11,7 @@ export default async function SignInPage({
 }) {
   if (await currentUser()) redirect("/");
   const { next } = await searchParams;
-  const demoUsers = listDemoUsers();
+  const demoUsers = await listDemoUsers();
 
   return (
     <div className="mx-auto max-w-sm pt-8">

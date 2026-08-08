@@ -19,18 +19,18 @@
  */
 
 /**
- * @param {import('libsql').Database} db
+ * @param {any} db
  * @param {{exhibitions: Array<{slug: string, title: string, venue: string,
  *          starts_on: string|null, ends_on: string|null, url: string}>}} doc
  * @returns {{inserted: number, updated: number, skipped: string[]}}
  */
-export function loadExhibitions(db, doc) {
+export async function loadExhibitions(db, doc) {
   if (!doc || !Array.isArray(doc.exhibitions)) {
     throw new Error("exhibitions.json: expected { exhibitions: [...] }");
   }
 
   const venueBySlug = new Map(
-    db.prepare("SELECT id, slug FROM venues").all().map((venue) => [venue.slug, venue.id]),
+    (await db.prepare("SELECT id, slug FROM venues").all()).map((venue) => [venue.slug, venue.id]),
   );
 
   const insert = db.prepare(
@@ -60,11 +60,11 @@ export function loadExhibitions(db, doc) {
       continue;
     }
 
-    if (exists.get(row.slug)) {
-      update.run(venueId, row.title, row.starts_on ?? null, row.ends_on ?? null, row.url ?? null, row.slug);
+    if (await exists.get(row.slug)) {
+      await update.run(venueId, row.title, row.starts_on ?? null, row.ends_on ?? null, row.url ?? null, row.slug);
       updated++;
     } else {
-      insert.run(row.slug, venueId, row.title, row.starts_on ?? null, row.ends_on ?? null, row.url ?? null);
+      await insert.run(row.slug, venueId, row.title, row.starts_on ?? null, row.ends_on ?? null, row.url ?? null);
       inserted++;
     }
   }

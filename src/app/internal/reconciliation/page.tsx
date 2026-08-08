@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function ReconciliationPage() {
   await requireStaff();
-  const counts = get<{
+  const counts = (await get<{
     matched: number;
     unreconciled: number;
     reviewed: number;
@@ -34,9 +34,9 @@ export default async function ReconciliationPage() {
       (SELECT COUNT(*) FROM works WHERE catalogue_status = 'reviewed') AS reviewed,
       (SELECT COUNT(*) FROM works WHERE catalogue_status = 'conflicted') AS conflicted,
       (SELECT COUNT(*) FROM reconciliation_candidates WHERE status = 'pending') AS pending`,
-  )!;
+  ))!;
 
-  const queue = all<{
+  const queue = await all<{
     id: number;
     qid: string;
     score: number;
@@ -57,7 +57,7 @@ export default async function ReconciliationPage() {
 
   // Contested Q-numbers are not candidate rows — nothing proposed them, the source
   // shipped them — so they need their own read rather than appearing in the queue.
-  const conflicts = duplicateQidGroups(db()) as {
+  const conflicts = (await duplicateQidGroups(await db())) as {
     qid: string;
     works: {
       id: number;

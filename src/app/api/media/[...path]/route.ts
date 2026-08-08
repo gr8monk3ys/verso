@@ -27,7 +27,7 @@ export async function GET(
   const { path: segments } = await params;
   const relative = segments.join("/");
 
-  const owner = photoViewer(relative);
+  const owner = await photoViewer(relative);
   if (!owner) return new Response("not found", { status: 404 });
 
   const viewer = await currentUser();
@@ -36,7 +36,7 @@ export async function GET(
   if (owner.isPrivate && !isOwner) {
     return new Response("not found", { status: 404 });
   }
-  if (viewer && !isOwner && isBlockedEitherWay(db(), viewer.id, owner.ownerId)) {
+  if (viewer && !isOwner && (await isBlockedEitherWay(await db(), viewer.id, owner.ownerId))) {
     return new Response("not found", { status: 404 });
   }
 

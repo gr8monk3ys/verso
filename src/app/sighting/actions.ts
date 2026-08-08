@@ -26,7 +26,7 @@ export async function editSightingAction(formData: FormData) {
   if (!user) redirect("/sign-in");
 
   const id = Number(formData.get("sighting_id"));
-  const owned = get<{ id: number }>(
+  const owned = await get<{ id: number }>(
     "SELECT id FROM sightings WHERE id = ? AND user_id = ?",
     id,
     user.id,
@@ -42,15 +42,17 @@ export async function editSightingAction(formData: FormData) {
   // unreferenced file would stay readable at its URL forever.
   const replacing = Boolean(photo && "path" in photo) || formData.get("remove_photo") === "on";
   const previous = replacing
-    ? get<{ photo_path: string | null }>(
-        "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
-        id,
-        user.id,
+    ? (
+        await get<{ photo_path: string | null }>(
+          "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
+          id,
+          user.id,
+        )
       )?.photo_path
     : null;
 
   const ratingRaw = emptyToNull(formData.get("rating"));
-  updateSighting(id, user.id, {
+  await updateSighting(id, user.id, {
     rating: ratingRaw == null ? null : Number(ratingRaw),
     review: emptyToNull(formData.get("review")),
     privateNote: emptyToNull(formData.get("private_note")),
@@ -70,30 +72,30 @@ export async function editSightingAction(formData: FormData) {
   });
 
   if (photo && "path" in photo) {
-    run("UPDATE sightings SET photo_path = ? WHERE id = ? AND user_id = ?", photo.path, id, user.id);
+    await run("UPDATE sightings SET photo_path = ? WHERE id = ? AND user_id = ?", photo.path, id, user.id);
   }
   if (formData.get("remove_photo") === "on") {
-    run("UPDATE sightings SET photo_path = NULL WHERE id = ? AND user_id = ?", id, user.id);
+    await run("UPDATE sightings SET photo_path = NULL WHERE id = ? AND user_id = ?", id, user.id);
   }
   if (previous && previous !== (photo && "path" in photo ? photo.path : null)) {
     await deleteMedia(previous);
   }
   const venueId = emptyToNull(formData.get("venue_id"));
-  run(
+  await run(
     "UPDATE sightings SET venue_id = ? WHERE id = ? AND user_id = ?",
     venueId == null ? null : Number(venueId),
     id,
     user.id,
   );
   if (formData.get("encounter")) {
-    run(
+    await run(
       "UPDATE sightings SET encounter = ? WHERE id = ? AND user_id = ?",
       String(formData.get("encounter")),
       id,
       user.id,
     );
   }
-  run(
+  await run(
     "UPDATE sightings SET review_public = ? WHERE id = ? AND user_id = ?",
     formData.get("review_public") === "on" ? 1 : 0,
     id,
@@ -108,7 +110,7 @@ export async function editSightingAction(formData: FormData) {
 export async function removeSightingAction(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
-  deleteSighting(Number(formData.get("sighting_id")), user.id);
+  await deleteSighting(Number(formData.get("sighting_id")), user.id);
   revalidatePath(`/u/${user.handle}/diary`);
   redirect(String(formData.get("next") ?? `/u/${user.handle}/diary`));
 }
@@ -126,12 +128,14 @@ export async function attachPhotoAction(formData: FormData) {
     redirect(`/sighting/${id}?error=${encodeURIComponent(photo.error)}`);
   }
   if (photo && "path" in photo) {
-    const previous = get<{ photo_path: string | null }>(
-      "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
-      id,
-      user.id,
+    const previous = (
+      await get<{ photo_path: string | null }>(
+        "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
+        id,
+        user.id,
+      )
     )?.photo_path;
-    run("UPDATE sightings SET photo_path = ? WHERE id = ? AND user_id = ?", photo.path, id, user.id);
+    await run("UPDATE sightings SET photo_path = ? WHERE id = ? AND user_id = ?", photo.path, id, user.id);
     if (previous && previous !== photo.path) await deleteMedia(previous);
   }
   revalidatePath(`/sighting/${id}`);
@@ -144,7 +148,7 @@ export async function reportAction(formData: FormData) {
   const limit = checkRateLimit(`report:${user.id}`, { max: 20 });
   if (!limit.ok) redirect(String(formData.get("next") ?? "/"));
 
-  report(db(), {
+  await report(await db(), {
     reporterId: user.id,
     subjectType: String(formData.get("subject_type")),
     subjectId: Number(formData.get("subject_id")),

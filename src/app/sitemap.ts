@@ -19,7 +19,7 @@ function base() {
   return (process.env.VERSO_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = base();
 
   const staticPages: MetadataRoute.Sitemap = [
@@ -33,7 +33,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${origin}/privacy`, changeFrequency: "yearly", priority: 0.1 },
   ];
 
-  const works = all<{ slug: string; updated_at: string; sightings: number }>(
+  const works = (await all<{ slug: string; updated_at: string; sightings: number }>(
     `SELECT w.slug, w.updated_at,
             (SELECT COUNT(*) FROM sightings s
               WHERE s.work_id = w.id AND s.is_private = 0) AS sightings
@@ -41,7 +41,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       ORDER BY sightings DESC, w.id
       LIMIT ?`,
     LIMIT,
-  ).map((work) => ({
+  )).map((work) => ({
     url: `${origin}/work/${work.slug}`,
     lastModified: work.updated_at,
     changeFrequency: "weekly" as const,
@@ -53,21 +53,21 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // The film-page argument applies at least as strongly one level up: a person
   // searching an artist's name is the likeliest visitor this site can win, and
   // every artist page aggregates works and reviews nothing else ranks for.
-  const artists = all<{ slug: string; work_count: number }>(
+  const artists = (await all<{ slug: string; work_count: number }>(
     "SELECT slug, work_count FROM artists ORDER BY work_count DESC",
-  ).map((artist) => ({
+  )).map((artist) => ({
     url: `${origin}/artist/${artist.slug}`,
     changeFrequency: "weekly" as const,
     priority: artist.work_count > 5 ? 0.7 : 0.5,
   }));
 
-  const venues = all<{ slug: string }>("SELECT slug FROM venues").map((venue) => ({
+  const venues = (await all<{ slug: string }>("SELECT slug FROM venues")).map((venue) => ({
     url: `${origin}/venue/${venue.slug}`,
     changeFrequency: "daily" as const,
     priority: 0.7,
   }));
 
-  const exhibitions = all<{ slug: string }>("SELECT slug FROM exhibitions").map(
+  const exhibitions = (await all<{ slug: string }>("SELECT slug FROM exhibitions")).map(
     (exhibition) => ({
       url: `${origin}/exhibition/${exhibition.slug}`,
       changeFrequency: "weekly" as const,
@@ -76,9 +76,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
   );
 
   // Public profiles only. A private diary must not be advertised as existing.
-  const people = all<{ handle: string }>(
+  const people = (await all<{ handle: string }>(
     "SELECT handle FROM users WHERE is_private = 0",
-  ).map((person) => ({
+  )).map((person) => ({
     url: `${origin}/u/${person.handle}`,
     changeFrequency: "daily" as const,
     priority: 0.5,

@@ -28,8 +28,8 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const sighting = sightingById(Number(id));
-  const access = sightingVisibility(Number(id));
+  const sighting = await sightingById(Number(id));
+  const access = await sightingVisibility(Number(id));
   if (!sighting || !access) return { title: "Not found — Verso" };
   // Metadata must gate exactly like the page: a private sighting's review has
   // no business in a <meta> tag either.
@@ -68,8 +68,8 @@ export default async function SightingPage({
 }) {
   const { id } = await params;
   const { reported } = await searchParams;
-  const sighting = sightingById(Number(id));
-  const access = sightingVisibility(Number(id));
+  const sighting = await sightingById(Number(id));
+  const access = await sightingVisibility(Number(id));
   if (!sighting || !access) notFound();
 
   const viewer = await currentUser();
@@ -79,10 +79,10 @@ export default async function SightingPage({
   // account is private however it is flagged — the same rule the photograph
   // route enforces. Blocked users see nothing.
   if (access.isPrivate && !isOwner) notFound();
-  if (viewer && !isOwner && isBlockedEitherWay(db(), viewer.id, sighting.user_id)) notFound();
+  if (viewer && !isOwner && (await isBlockedEitherWay(await db(), viewer.id, sighting.user_id))) notFound();
 
-  const comments = commentsFor(sighting.id);
-  const liked = viewer ? likedByUser(viewer.id, [sighting.id]).has(sighting.id) : false;
+  const comments = await commentsFor(sighting.id);
+  const liked = viewer ? (await likedByUser(viewer.id, [sighting.id])).has(sighting.id) : false;
   const tags = sighting.tags ? sighting.tags.split(",").filter(Boolean) : [];
   const photo = photoUrl(sighting.photo_path);
   const path = `/sighting/${sighting.id}`;

@@ -7,8 +7,11 @@
  * module is the conversion: Sighting in, Display out.
  *
  * Plain JS so the demo seeder, the backfill script and the app all share one
- * implementation. Every function takes an open libsql database handle.
+ * implementation. Every function takes an open database handle and is async.
  */
+
+/** Postgres equivalent of SQLite's datetime('now') — UTC, 'YYYY-MM-DD HH:MM:SS'. */
+const NOW = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')";
 
 /** Confidence after n independent crowd assertions. Never reaches 1.0. */
 export function crowdConfidence(assertions) {
@@ -32,10 +35,10 @@ export const STALE_AFTER_DAYS = 400;
  *          exhibitionId?: number | null}} assertion
  * @returns {number | null}
  */
-export function assertDisplay(db, { workId, venueId, seenOn, exhibitionId = null }) {
+export async function assertDisplay(db, { workId, venueId, seenOn, exhibitionId = null }) {
   if (!workId || !venueId || !seenOn) return null;
 
-  const open = db
+  const open = await db
     .prepare(
       `SELECT id, source, sighting_count, last_seen_on
          FROM displays
@@ -51,27 +54,29 @@ export function assertDisplay(db, { workId, venueId, seenOn, exhibitionId = null
       open.source === "institutional" ? 1.0 : crowdConfidence(count);
     const lastSeen =
       !open.last_seen_on || seenOn > open.last_seen_on ? seenOn : open.last_seen_on;
-    db.prepare(
-      `UPDATE displays
-          SET sighting_count = ?, confidence = ?, last_seen_on = ?,
-              exhibition_id = COALESCE(exhibition_id, ?),
-              updated_at = datetime('now')
-        WHERE id = ?`,
-    ).run(count, confidence, lastSeen, exhibitionId, open.id);
-    closeDisplacedDisplays(db, workId, venueId, seenOn);
+    await db
+      .prepare(
+        `UPDATE displays
+            SET sighting_count = ?, confidence = ?, last_seen_on = ?,
+                exhibition_id = COALESCE(exhibition_id, ?),
+                updated_at = ${NOW}
+          WHERE id = ?`,
+      )
+      .run(count, confidence, lastSeen, exhibitionId, open.id);
+    await closeDisplacedDisplays(db, workId, venueId, seenOn);
     return open.id;
   }
 
-  const result = db
+  const created = await db
     .prepare(
       `INSERT INTO displays (work_id, venue_id, exhibition_id, started_on, source,
                              confidence, sighting_count, last_seen_on)
-       VALUES (?, ?, ?, ?, 'crowd', ?, 1, ?)`,
+       VALUES (?, ?, ?, ?, 'crowd', ?, 1, ?) RETURNING id`,
     )
-    .run(workId, venueId, exhibitionId, seenOn, crowdConfidence(1), seenOn);
+    .get(workId, venueId, exhibitionId, seenOn, crowdConfidence(1), seenOn);
 
-  closeDisplacedDisplays(db, workId, venueId, seenOn);
-  return Number(result.lastInsertRowid);
+  await closeDisplacedDisplays(db, workId, venueId, seenOn);
+  return created.id;
 }
 
 /**
@@ -79,44 +84,44 @@ export function assertDisplay(db, { workId, venueId, seenOn, exhibitionId = null
  * display asserting it is on Fifth Avenue — that is a loan, a rotation or a
  * rehang, and the fresher assertion wins.
  */
-function closeDisplacedDisplays(db, workId, venueId, seenOn) {
-  db.prepare(
-    `UPDATE displays
-        SET ended_on = ?, updated_at = datetime('now')
-      WHERE work_id = ? AND venue_id <> ? AND ended_on IS NULL
-        AND (last_seen_on IS NULL OR last_seen_on <= ?)`,
-  ).run(seenOn, workId, venueId, seenOn);
+async function closeDisplacedDisplays(db, workId, venueId, seenOn) {
+  await db
+    .prepare(
+      `UPDATE displays
+          SET ended_on = ?, updated_at = ${NOW}
+        WHERE work_id = ? AND venue_id <> ? AND ended_on IS NULL
+          AND (last_seen_on IS NULL OR last_seen_on <= ?)`,
+    )
+    .run(seenOn, workId, venueId, seenOn);
 }
 
 /**
  * Current best belief about where a work is. Institutional data outranks the
  * crowd; among crowd assertions, the most recently confirmed wins.
  */
-export function currentDisplay(db, workId) {
+export async function currentDisplay(db, workId) {
   return (
-    db
+    (await db
       .prepare(
         `SELECT d.*, v.name AS venue_name, v.slug AS venue_slug, v.city AS venue_city
            FROM displays d
            JOIN venues v ON v.id = d.venue_id
           WHERE d.work_id = ? AND d.ended_on IS NULL
             AND (d.last_seen_on IS NULL
-                 OR julianday('now') - julianday(d.last_seen_on) <= ?)
+                 OR ((now() AT TIME ZONE 'utc')::date - d.last_seen_on::date) <= ?)
           ORDER BY (d.source = 'institutional') DESC, d.confidence DESC,
                    d.last_seen_on DESC
           LIMIT 1`,
       )
-      .get(workId, STALE_AFTER_DAYS) ?? null
+      .get(workId, STALE_AFTER_DAYS)) ?? null
   );
 }
 
 /** Rebuild every crowd display from scratch. Used by tests and repair runs. */
-export function rebuildDisplaysFromSightings(db) {
-  db.exec("DELETE FROM displays WHERE source = 'crowd'");
-  db.exec(
-    `UPDATE displays SET sighting_count = 0 WHERE source = 'institutional'`,
-  );
-  const sightings = db
+export async function rebuildDisplaysFromSightings(db) {
+  await db.exec("DELETE FROM displays WHERE source = 'crowd'");
+  await db.exec(`UPDATE displays SET sighting_count = 0 WHERE source = 'institutional'`);
+  const sightings = await db
     .prepare(
       `SELECT work_id, venue_id, seen_on, exhibition_id
          FROM sightings
@@ -126,7 +131,7 @@ export function rebuildDisplaysFromSightings(db) {
     )
     .all();
   for (const s of sightings) {
-    assertDisplay(db, {
+    await assertDisplay(db, {
       workId: s.work_id,
       venueId: s.venue_id,
       seenOn: s.seen_on,

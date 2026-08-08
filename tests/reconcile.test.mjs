@@ -12,8 +12,8 @@ import {
 import { addWork, testDb } from "./helpers.mjs";
 
 test("an accession-number hit is applied without asking anyone", async () => {
-  const db = testDb();
-  const work = addWork(db, "harvesters", {
+  const db = await testDb();
+  const work = await addWork(db, "harvesters", {
     title: "The Harvesters",
     artist: "Pieter Bruegel the Elder",
     year: 1565,
@@ -29,7 +29,7 @@ test("an accession-number hit is applied without asking anyone", async () => {
 
   assert.equal(stats.accepted, 1);
   assert.equal(stats.queued, 0);
-  const row = db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(work);
+  const row = await db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(work);
   assert.equal(row.wikidata_qid, "Q1123302");
   assert.equal(row.catalogue_status, "matched");
 });
@@ -37,8 +37,8 @@ test("an accession-number hit is applied without asking anyone", async () => {
 test("two near-tied candidates are never guessed between", async () => {
   // The multiple-versions problem §10.2 flags: the same composition painted
   // twice, in two collections, with the same title and artist.
-  const db = testDb();
-  addWork(db, "self-portrait", {
+  const db = await testDb();
+  await addWork(db, "self-portrait", {
     title: "Self-Portrait",
     artist: "Rembrandt van Rijn",
     year: 1660,
@@ -56,14 +56,14 @@ test("two near-tied candidates are never guessed between", async () => {
   assert.equal(stats.queued, 1);
   assert.equal(stats.conflicted, 1);
 
-  const work = db.prepare("SELECT wikidata_qid, catalogue_status FROM works").get();
+  const work = await db.prepare("SELECT wikidata_qid, catalogue_status FROM works").get();
   assert.equal(work.wikidata_qid, null, "nothing is written while it is ambiguous");
   assert.equal(work.catalogue_status, "conflicted");
 });
 
 test("a weak match is queued rather than dropped or applied", async () => {
-  const db = testDb();
-  addWork(db, "harvesters", {
+  const db = await testDb();
+  await addWork(db, "harvesters", {
     title: "The Harvesters",
     artist: "Pieter Bruegel the Elder",
     year: null,
@@ -78,14 +78,14 @@ test("a weak match is queued rather than dropped or applied", async () => {
 
   assert.equal(stats.accepted, 0);
   assert.equal(stats.queued, 1);
-  const candidate = db.prepare("SELECT * FROM reconciliation_candidates").get();
+  const candidate = await db.prepare("SELECT * FROM reconciliation_candidates").get();
   assert.equal(candidate.status, "pending");
   assert.equal(candidate.method, "title_artist");
 });
 
 test("no candidate at all leaves the work alone", async () => {
-  const db = testDb();
-  addWork(db, "unknown", { title: "Untitled", artist: "Anonymous" });
+  const db = await testDb();
+  await addWork(db, "unknown", { title: "Untitled", artist: "Anonymous" });
 
   const stats = await reconcileWorks(
     db,
@@ -93,12 +93,12 @@ test("no candidate at all leaves the work alone", async () => {
   );
 
   assert.equal(stats.unmatched, 1);
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM reconciliation_candidates").get().n, 0);
+  assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM reconciliation_candidates").get()).n, 0);
 });
 
 test("a dry run writes nothing", async () => {
-  const db = testDb();
-  addWork(db, "harvesters", {
+  const db = await testDb();
+  await addWork(db, "harvesters", {
     title: "The Harvesters",
     artist: "Pieter Bruegel the Elder",
     year: 1565,
@@ -113,12 +113,12 @@ test("a dry run writes nothing", async () => {
     { dryRun: true },
   );
 
-  assert.equal(db.prepare("SELECT wikidata_qid FROM works").get().wikidata_qid, null);
+  assert.equal((await db.prepare("SELECT wikidata_qid FROM works").get()).wikidata_qid, null);
 });
 
 test("accepting a candidate rejects its rivals for the same work", async () => {
-  const db = testDb();
-  const work = addWork(db, "self-portrait", {
+  const db = await testDb();
+  const work = await addWork(db, "self-portrait", {
     title: "Self-Portrait",
     artist: "Rembrandt van Rijn",
   });
@@ -130,26 +130,26 @@ test("accepting a candidate rejects its rivals for the same work", async () => {
     ]),
   );
 
-  const first = db
+  const first = await db
     .prepare("SELECT id FROM reconciliation_candidates ORDER BY score DESC LIMIT 1")
     .get();
-  acceptCandidate(db, first.id);
+  await acceptCandidate(db, first.id);
 
-  const statuses = db
+  const statuses = await db
     .prepare("SELECT status, COUNT(*) AS n FROM reconciliation_candidates GROUP BY status")
     .all();
   assert.deepEqual(
     Object.fromEntries(statuses.map((row) => [row.status, row.n])),
     { accepted: 1, rejected: 1 },
   );
-  const row = db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(work);
+  const row = await db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(work);
   assert.ok(row.wikidata_qid);
   assert.equal(row.catalogue_status, "reviewed");
 });
 
 test("rejecting the last candidate marks the work reviewed, not pending forever", async () => {
-  const db = testDb();
-  const work = addWork(db, "harvesters", {
+  const db = await testDb();
+  const work = await addWork(db, "harvesters", {
     title: "The Harvesters",
     artist: "Pieter Bruegel the Elder",
   });
@@ -157,73 +157,73 @@ test("rejecting the last candidate marks the work reviewed, not pending forever"
     db,
     fixtureProvider([{ qid: "Q1", title: "Harvesters", artist: "Pieter Bruegel the Elder" }]),
   );
-  const candidate = db.prepare("SELECT id FROM reconciliation_candidates").get();
-  rejectCandidate(db, candidate.id);
+  const candidate = await db.prepare("SELECT id FROM reconciliation_candidates").get();
+  await rejectCandidate(db, candidate.id);
 
-  const row = db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(work);
+  const row = await db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(work);
   assert.equal(row.wikidata_qid, null);
   assert.equal(row.catalogue_status, "reviewed", "a person looked and there was no match");
 });
 
 test("already-reconciled works are not re-examined", async () => {
-  const db = testDb();
-  addWork(db, "harvesters", { title: "The Harvesters", qid: "Q1123302", status: "matched" });
+  const db = await testDb();
+  await addWork(db, "harvesters", { title: "The Harvesters", qid: "Q1123302", status: "matched" });
   const stats = await reconcileWorks(db, fixtureProvider([]));
   assert.equal(stats.examined, 0);
 });
 
 // --------------------------------------------------- duplicated Q-numbers ---
 
-test("one Q-number on two works sends both to the human queue", () => {
+test("one Q-number on two works sends both to the human queue", async () => {
   // Found by grading the reconciler against the Met's own links: three Q-numbers
   // in the committed catalogue are assigned to two objects each. A Q-number
   // identifies one physical work, so this is the pooled-reviews failure arriving
   // from the source — and the scoring path never sees it.
-  const db = testDb();
-  const a = addWork(db, "samuel-bernard", { title: "Samuel Bernard" });
-  const b = addWork(db, "robert-fulton", { title: "Robert Fulton" });
-  const c = addWork(db, "unaffected", { title: "Unaffected" });
+  const db = await testDb();
+  const a = await addWork(db, "samuel-bernard", { title: "Samuel Bernard" });
+  const b = await addWork(db, "robert-fulton", { title: "Robert Fulton" });
+  const c = await addWork(db, "unaffected", { title: "Unaffected" });
   const set = db.prepare(
     "UPDATE works SET wikidata_qid = ?, catalogue_status = 'matched' WHERE id = ?",
   );
-  set.run("Q55622989", a);
-  set.run("Q55622989", b);
-  set.run("Q7761325", c);
+  await set.run("Q55622989", a);
+  await set.run("Q55622989", b);
+  await set.run("Q7761325", c);
 
-  const result = flagDuplicateQids(db);
+  const result = await flagDuplicateQids(db);
 
   assert.equal(result.flagged, 2, "both claimants are flagged, not one");
   assert.deepEqual(result.qids, ["Q55622989"]);
-  const status = (id) =>
-    db.prepare("SELECT catalogue_status FROM works WHERE id = ?").get(id).catalogue_status;
-  assert.equal(status(a), "conflicted");
-  assert.equal(status(b), "conflicted");
-  assert.equal(status(c), "matched", "a unique Q-number is left alone");
+  const status = async (id) =>
+    (await db.prepare("SELECT catalogue_status FROM works WHERE id = ?").get(id)).catalogue_status;
+  assert.equal(await status(a), "conflicted");
+  assert.equal(await status(b), "conflicted");
+  assert.equal(await status(c), "matched", "a unique Q-number is left alone");
 
   // Neither row loses its identifier: which one keeps it is a human's call, and
   // guessing between two real objects is what the thresholds forbid.
-  const kept = db
+  const kept = (await db
     .prepare("SELECT COUNT(*) AS n FROM works WHERE wikidata_qid = 'Q55622989'")
-    .get().n;
+    .get()).n;
   assert.equal(kept, 2);
 });
 
-test("flagging duplicates is idempotent and quiet when there are none", () => {
-  const db = testDb();
-  const only = addWork(db, "solo");
-  db.prepare("UPDATE works SET wikidata_qid = 'Q1' WHERE id = ?").run(only);
-  assert.deepEqual(flagDuplicateQids(db), { flagged: 0, qids: [] });
+test("flagging duplicates is idempotent and quiet when there are none", async () => {
+  const db = await testDb();
+  const only = await addWork(db, "solo");
+  await db.prepare("UPDATE works SET wikidata_qid = 'Q1' WHERE id = ?").run(only);
+  assert.deepEqual(await flagDuplicateQids(db), { flagged: 0, qids: [] });
 });
 
-test("a contested Q-number is presented with the evidence that settles it", () => {
-  const db = testDb();
-  const bernard = addWork(db, "samuel-bernard", { title: "Samuel Bernard", accession: "66.210a-c" });
-  const fulton = addWork(db, "robert-fulton", { title: "Robert Fulton", accession: "1989.329" });
+test("a contested Q-number is presented with the evidence that settles it", async () => {
+  const db = await testDb();
+  const bernard = await addWork(db, "samuel-bernard", { title: "Samuel Bernard", accession: "66.210a-c" });
+  const fulton = await addWork(db, "robert-fulton", { title: "Robert Fulton", accession: "1989.329" });
   const set = db.prepare("UPDATE works SET wikidata_qid = 'Q55622989' WHERE id = ?");
-  set.run(bernard);
-  set.run(fulton);
+  await set.run(bernard);
+  await set.run(fulton);
 
-  const groups = duplicateQidGroups(db);
+  const groups = await duplicateQidGroups(db);
   assert.equal(groups.length, 1);
   assert.equal(groups[0].qid, "Q55622989");
   // The accession numbers are the whole point: the Q-number's own inventory
@@ -234,34 +234,34 @@ test("a contested Q-number is presented with the evidence that settles it", () =
   );
 });
 
-test("awarding a contested Q-number detaches the other claimant without deleting it", () => {
-  const db = testDb();
-  const bernard = addWork(db, "samuel-bernard", { title: "Samuel Bernard", accession: "66.210a-c" });
-  const fulton = addWork(db, "robert-fulton", { title: "Robert Fulton", accession: "1989.329" });
+test("awarding a contested Q-number detaches the other claimant without deleting it", async () => {
+  const db = await testDb();
+  const bernard = await addWork(db, "samuel-bernard", { title: "Samuel Bernard", accession: "66.210a-c" });
+  const fulton = await addWork(db, "robert-fulton", { title: "Robert Fulton", accession: "1989.329" });
   for (const id of [bernard, fulton]) {
-    db.prepare("UPDATE works SET wikidata_qid = 'Q55622989', catalogue_status = 'conflicted' WHERE id = ?").run(id);
-    db.prepare("INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', 'Q55622989')").run(id);
+    await db.prepare("UPDATE works SET wikidata_qid = 'Q55622989', catalogue_status = 'conflicted' WHERE id = ?").run(id);
+    await db.prepare("INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', 'Q55622989')").run(id);
   }
 
   // Wikidata says the inventory number is 66.210a-c, so Bernard keeps it.
-  const result = resolveQidConflict(db, bernard);
+  const result = await resolveQidConflict(db, bernard);
   assert.equal(result.qid, "Q55622989");
   assert.deepEqual(result.detached, [fulton]);
 
-  const row = (id) => db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(id);
-  assert.equal(row(bernard).wikidata_qid, "Q55622989");
-  assert.equal(row(bernard).catalogue_status, "matched");
+  const row = async (id) => await db.prepare("SELECT wikidata_qid, catalogue_status FROM works WHERE id = ?").get(id);
+  assert.equal((await row(bernard)).wikidata_qid, "Q55622989");
+  assert.equal((await row(bernard)).catalogue_status, "matched");
   // The loser goes back to the pool rather than being guessed at or dropped.
-  assert.equal(row(fulton).wikidata_qid, null);
-  assert.equal(row(fulton).catalogue_status, "unreconciled");
+  assert.equal((await row(fulton)).wikidata_qid, null);
+  assert.equal((await row(fulton)).catalogue_status, "unreconciled");
 
   // The stale identifier row must go too, or an accession lookup finds it again.
-  const identifiers = db
+  const identifiers = (await db
     .prepare("SELECT COUNT(*) AS n FROM work_identifiers WHERE work_id = ? AND scheme = 'wikidata'")
-    .get(fulton).n;
+    .get(fulton)).n;
   assert.equal(identifiers, 0);
 
   // The work itself survives — it is a real object with a real accession number.
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM works").get().n, 2);
-  assert.equal(duplicateQidGroups(db).length, 0, "and the conflict is gone");
+  assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM works").get()).n, 2);
+  assert.equal((await duplicateQidGroups(db)).length, 0, "and the conflict is gone");
 });

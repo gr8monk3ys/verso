@@ -21,8 +21,8 @@ export default async function OnboardingPage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const venues = activeVenues();
-  const suggestions = searchWorks("", { limit: 24 });
+  const venues = await activeVenues();
+  const suggestions = await searchWorks("", { limit: 24 });
 
   return (
     <div className="pb-10">

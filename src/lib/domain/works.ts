@@ -59,18 +59,18 @@ const CARD_JOINS = `
   LEFT JOIN venues v ON v.id = COALESCE(d.venue_id, w.home_venue_id)
 `;
 
-export function workBySlug(slug: string): WorkCard | undefined {
-  return get<WorkCard>(`SELECT ${CARD_COLUMNS} ${CARD_JOINS} WHERE w.slug = ?`, slug);
+export async function workBySlug(slug: string): Promise<WorkCard | undefined> {
+  return await get<WorkCard>(`SELECT ${CARD_COLUMNS} ${CARD_JOINS} WHERE w.slug = ?`, slug);
 }
 
-export function workById(id: number): WorkCard | undefined {
-  return get<WorkCard>(`SELECT ${CARD_COLUMNS} ${CARD_JOINS} WHERE w.id = ?`, id);
+export async function workById(id: number): Promise<WorkCard | undefined> {
+  return await get<WorkCard>(`SELECT ${CARD_COLUMNS} ${CARD_JOINS} WHERE w.id = ?`, id);
 }
 
-export function worksByIds(ids: number[]): WorkCard[] {
+export async function worksByIds(ids: number[]): Promise<WorkCard[]> {
   if (!ids.length) return [];
   const placeholders = ids.map(() => "?").join(",");
-  const rows = all<WorkCard>(
+  const rows = await all<WorkCard>(
     `SELECT ${CARD_COLUMNS} ${CARD_JOINS} WHERE w.id IN (${placeholders})`,
     ...ids,
   );
@@ -87,12 +87,12 @@ export function worksByIds(ids: number[]): WorkCard[] {
 export function ftsQuery(input: string): string | null {
   const tokens = input
     .toLowerCase()
-    .replace(/["*()]/g, " ")
+    .replace(/["&|!():*'\\]/g, " ")
     .split(/\s+/)
     .filter((token) => token.length > 0)
     .slice(0, 8);
   if (!tokens.length) return null;
-  return tokens.map((token) => `"${token}"*`).join(" AND ");
+  return tokens.map((token) => `${token}:*`).join(" & ");
 }
 
 export type SearchOptions = {
@@ -102,7 +102,7 @@ export type SearchOptions = {
   onViewOnly?: boolean;
 };
 
-export function searchWorks(query: string, options: SearchOptions = {}): WorkCard[] {
+export async function searchWorks(query: string, options: SearchOptions = {}): Promise<WorkCard[]> {
   const { limit = 30, offset = 0, venueId = null, onViewOnly = false } = options;
   const match = ftsQuery(query);
 
@@ -116,7 +116,7 @@ export function searchWorks(query: string, options: SearchOptions = {}): WorkCar
   const where = filters.length ? `AND ${filters.join(" AND ")}` : "";
 
   if (!match) {
-    return all<WorkCard>(
+    return await all<WorkCard>(
       `SELECT ${CARD_COLUMNS} ${CARD_JOINS}
         WHERE 1 = 1 ${where}
         ORDER BY sighting_count DESC, w.id
@@ -128,13 +128,13 @@ export function searchWorks(query: string, options: SearchOptions = {}): WorkCar
   }
 
   // bm25 weights: a title hit beats an artist hit beats everything else.
-  return all<WorkCard>(
-    `SELECT ${CARD_COLUMNS}, bm25(works_fts, 10.0, 6.0, 1.0, 1.0, 1.0) AS rank
+  return await all<WorkCard>(
+    `SELECT ${CARD_COLUMNS}, ts_rank('{0.1, 0.2, 0.4, 1.0}'::float4[], w.search, to_tsquery('simple', ?)) AS rank
      ${CARD_JOINS}
-     JOIN works_fts ON works_fts.rowid = w.id
-      WHERE works_fts MATCH ? ${where}
-      ORDER BY rank, sighting_count DESC
+      WHERE w.search @@ to_tsquery('simple', ?) ${where}
+      ORDER BY rank DESC, sighting_count DESC
       LIMIT ? OFFSET ?`,
+    match,
     match,
     ...params,
     limit,
@@ -151,8 +151,8 @@ export function searchWorks(query: string, options: SearchOptions = {}): WorkCar
  * "wow" when the only person who tagged it had logged it privately, quietly
  * publishing an edited fragment of a private entry.
  */
-export function worksByTag(tag: string, limit = 60): WorkCard[] {
-  return all<WorkCard>(
+export async function worksByTag(tag: string, limit = 60): Promise<WorkCard[]> {
+  return await all<WorkCard>(
     `SELECT ${CARD_COLUMNS} ${CARD_JOINS}
       WHERE w.id IN (
         SELECT s.work_id FROM sighting_tags t
@@ -194,19 +194,26 @@ export type PopularWindow = (typeof POPULAR_WINDOWS)[number]["key"];
  * `seen_on` is the clock, because the question is what is being logged now —
  * somebody logging a 2019 visit from memory today is this week's activity.
  */
-export function popularWorks(options: { days?: number | null; limit?: number } = {}) {
+export async function popularWorks(options: { days?: number | null; limit?: number } = {}) {
   const { days = 7, limit = 12 } = options;
-  const window = days == null ? "" : `AND s.created_at >= datetime('now', ?)`;
-  const params: unknown[] = days == null ? [] : [`-${days} days`];
+  const window =
+    days == null
+      ? ""
+      : `AND s.created_at >= to_char((now() AT TIME ZONE 'utc') - make_interval(days => ?), 'YYYY-MM-DD HH24:MI:SS')`;
+  const params: unknown[] = days == null ? [] : [days];
 
-  return all<PopularWork>(
-    `SELECT ${CARD_COLUMNS},
-            (SELECT COUNT(DISTINCT s.user_id) FROM sightings s JOIN users u ON u.id = s.user_id
-              WHERE s.work_id = w.id AND s.is_private = 0 AND u.is_private = 0 ${window})
-              AS logger_count
-     ${CARD_JOINS}
+  // Postgres, unlike SQLite, cannot reference a SELECT-list alias (logger_count)
+  // in WHERE, so the aggregate is computed in a subquery and filtered outside it.
+  return await all<PopularWork>(
+    `SELECT * FROM (
+       SELECT ${CARD_COLUMNS},
+              (SELECT COUNT(DISTINCT s.user_id) FROM sightings s JOIN users u ON u.id = s.user_id
+                WHERE s.work_id = w.id AND s.is_private = 0 AND u.is_private = 0 ${window})
+                AS logger_count
+       ${CARD_JOINS}
+     ) ranked
       WHERE logger_count > 0
-      ORDER BY logger_count DESC, avg_rating DESC, w.id
+      ORDER BY logger_count DESC, avg_rating DESC, id
       LIMIT ?`,
     ...params,
     limit,
@@ -228,38 +235,37 @@ export function popularWorks(options: { days?: number | null; limit?: number } =
  * end by whoever happened to give a five. That is a list of recent activity
  * wearing a chart's clothes.
  */
-export function popularChart(limit = 12): {
+export async function popularChart(limit = 12): Promise<{
   window: PopularWindow;
   label: string;
   works: PopularWork[];
-} {
+}> {
   for (const { key, days, label } of POPULAR_WINDOWS) {
-    const works = popularWorks({ days, limit });
+    const works = await popularWorks({ days, limit });
     const ranks = works.length >= Math.min(limit, 6) && (works[0]?.logger_count ?? 0) >= 2;
     if (ranks || days == null) return { window: key, label, works };
   }
   return { window: "all", label: "all time", works: [] };
 }
 
-export function countSearchWorks(query: string, options: SearchOptions = {}): number {
+export async function countSearchWorks(query: string, options: SearchOptions = {}): Promise<number> {
   const match = ftsQuery(query);
   const venueId = options.venueId ?? null;
   if (!match) {
-    return get<{ n: number }>(
+    return (await get<{ n: number }>(
       `SELECT COUNT(*) AS n FROM works w
         WHERE (? IS NULL OR w.home_venue_id = ?)`,
       venueId,
       venueId,
-    )!.n;
+    ))!.n;
   }
-  return get<{ n: number }>(
+  return (await get<{ n: number }>(
     `SELECT COUNT(*) AS n FROM works w
-       JOIN works_fts ON works_fts.rowid = w.id
-      WHERE works_fts MATCH ? AND (? IS NULL OR w.home_venue_id = ?)`,
+      WHERE w.search @@ to_tsquery('simple', ?) AND (? IS NULL OR w.home_venue_id = ?)`,
     match,
     venueId,
     venueId,
-  )!.n;
+  ))!.n;
 }
 
 export type RatingSummary = {
@@ -269,8 +275,8 @@ export type RatingSummary = {
 };
 
 /** Aggregate rating for a public Work page (V1). */
-export function ratingSummary(workId: number): RatingSummary {
-  const rows = all<{ rating: number; n: number }>(
+export async function ratingSummary(workId: number): Promise<RatingSummary> {
+  const rows = await all<{ rating: number; n: number }>(
     `SELECT rating, COUNT(*) AS n FROM sightings
       WHERE work_id = ? AND rating IS NOT NULL AND is_private = 0
       GROUP BY rating`,
@@ -286,8 +292,8 @@ export function ratingSummary(workId: number): RatingSummary {
   return { count, average: count ? total / count / 2 : null, distribution };
 }
 
-export function whereIsIt(workId: number) {
-  return currentDisplay(db(), workId) as
+export async function whereIsIt(workId: number) {
+  return (await currentDisplay(await db(), workId)) as
     | {
         id: number;
         venue_id: number;
@@ -303,11 +309,11 @@ export function whereIsIt(workId: number) {
     | null;
 }
 
-export function relatedWorks(work: Work, limit = 6): WorkCard[] {
+export async function relatedWorks(work: Work, limit = 6): Promise<WorkCard[]> {
   // Same artist first, then the same room — which is how people actually
   // encounter the next thing.
   const sameArtist = work.artist_display
-    ? all<WorkCard>(
+    ? await all<WorkCard>(
         `SELECT ${CARD_COLUMNS} ${CARD_JOINS}
           WHERE w.artist_display = ? AND w.id <> ?
           ORDER BY sighting_count DESC LIMIT ?`,
@@ -318,7 +324,7 @@ export function relatedWorks(work: Work, limit = 6): WorkCard[] {
     : [];
   if (sameArtist.length >= limit) return sameArtist;
 
-  const neighbours = all<WorkCard>(
+  const neighbours = await all<WorkCard>(
     `SELECT ${CARD_COLUMNS} ${CARD_JOINS}
       WHERE d.location_label = (
               SELECT location_label FROM displays
@@ -333,8 +339,8 @@ export function relatedWorks(work: Work, limit = 6): WorkCard[] {
   return [...sameArtist, ...neighbours.filter((w) => !seen.has(w.id))];
 }
 
-export function topTagsForWork(workId: number, limit = 8) {
-  return all<{ tag: string; n: number }>(
+export async function topTagsForWork(workId: number, limit = 8) {
+  return await all<{ tag: string; n: number }>(
     `SELECT t.tag, COUNT(*) AS n
        FROM sighting_tags t
        JOIN sightings s ON s.id = t.sighting_id

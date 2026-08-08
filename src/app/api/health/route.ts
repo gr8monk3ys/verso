@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    const row = get<{ works: number }>("SELECT COUNT(*) AS works FROM works");
+    const row = await get<{ works: number }>("SELECT COUNT(*) AS works FROM works");
     return NextResponse.json(
       { status: "ok", works: Number(row?.works ?? 0) },
       { headers: { "cache-control": "no-store" } },

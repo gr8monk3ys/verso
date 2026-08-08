@@ -8,10 +8,10 @@ export const alt = "A work on Verso";
 
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const work = workBySlug(slug);
+  const work = await workBySlug(slug);
   if (!work) return ogCard({ title: "Not in the catalogue" });
 
-  const summary = ratingSummary(work.id);
+  const summary = await ratingSummary(work.id);
   return ogCard({
     eyebrow: work.venue_name ?? "In the catalogue",
     title: displayTitle(work.title),

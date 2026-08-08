@@ -76,20 +76,20 @@ export const galleryPriorProvider: RecognitionProvider = {
     const recentRoom =
       galleryHint ??
       (userId
-        ? (all<{ location_label: string }>(
+        ? (await all<{ location_label: string }>(
             `SELECT d.location_label
                FROM sightings s
                JOIN displays d ON d.work_id = s.work_id AND d.venue_id = s.venue_id
                                 AND d.ended_on IS NULL
               WHERE s.user_id = ? AND s.venue_id = ?
-                AND s.created_at >= datetime('now', '-4 hours')
+                AND s.created_at >= to_char((now() AT TIME ZONE 'utc') - make_interval(hours => 4), 'YYYY-MM-DD HH24:MI:SS')
               ORDER BY s.created_at DESC LIMIT 1`,
             userId,
             venueId,
-          )[0]?.location_label ?? null)
+          ))[0]?.location_label ?? null
         : null);
 
-    const rows = all<Omit<Candidate, "score" | "basis"> & { seen_by_user: number; popularity: number }>(
+    const rows = await all<Omit<Candidate, "score" | "basis"> & { seen_by_user: number; popularity: number }>(
       `SELECT ${CANDIDATE_COLUMNS},
               (SELECT COUNT(*) FROM sightings s WHERE s.work_id = w.id AND s.user_id = ?) AS seen_by_user,
               (SELECT COUNT(*) FROM sightings s WHERE s.work_id = w.id) AS popularity
@@ -154,7 +154,7 @@ export function httpProvider(endpoint: string): RecognitionProvider {
 
       const resolved: Candidate[] = [];
       for (const candidate of body.candidates ?? []) {
-        const row = all<Omit<Candidate, "score" | "basis">>(
+        const row = (await all<Omit<Candidate, "score" | "basis">>(
           `SELECT ${CANDIDATE_COLUMNS}
              FROM works w
              LEFT JOIN displays d ON d.work_id = w.id AND d.ended_on IS NULL
@@ -169,7 +169,7 @@ export function httpProvider(endpoint: string): RecognitionProvider {
           candidate.wikidataQid ?? null,
           candidate.accession ?? null,
           candidate.accession ?? null,
-        )[0];
+        ))[0];
         if (!row) continue;
         resolved.push({
           ...row,
@@ -206,7 +206,7 @@ export function getRecognitionProvider(): RecognitionProvider {
  * the top match, 1..n for an alternate, -1 when they gave up and searched —
  * which is the number the §13 guardrail is actually about.
  */
-export function recordRecognition(input: {
+export async function recordRecognition(input: {
   userId: number | null;
   venueId: number | null;
   topWorkId: number | null;
@@ -214,7 +214,7 @@ export function recordRecognition(input: {
   chosenRank: number;
   topScore: number | null;
 }) {
-  run(
+  await run(
     `INSERT INTO recognition_events (user_id, venue_id, top_work_id, chosen_work_id,
                                      chosen_rank, top_score)
      VALUES (?,?,?,?,?,?)`,

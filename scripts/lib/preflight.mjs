@@ -99,32 +99,27 @@ export function checkAll(env, fsProbe, state = {}) {
   }
 
   // ---------------------------------------------------------------- data ---
-  const remoteDb = /^(libsql|https?|wss?):\/\//.test(env.VERSO_DATABASE_URL ?? "");
+  // Neon (or any managed Postgres) is a postgres:// connection string with the
+  // credentials embedded in the URL — there is no separate auth token to set.
+  const remoteDb = /^postgres(ql)?:\/\//.test(env.DATABASE_URL ?? "");
   const onServerless = Boolean(env.VERCEL);
 
   if (remoteDb) {
-    // A remote libSQL/Turso database: nothing on the local disk to probe, and
-    // a managed server is durable by construction.
-    add(
-      "database",
-      env.VERSO_DATABASE_AUTH_TOKEN ? "pass" : production ? "fail" : "warn",
-      env.VERSO_DATABASE_AUTH_TOKEN
-        ? `remote → ${hostOf(env.VERSO_DATABASE_URL)}`
-        : "VERSO_DATABASE_URL is remote but VERSO_DATABASE_AUTH_TOKEN is unset",
-      "set VERSO_DATABASE_AUTH_TOKEN to the Turso database token",
-    );
+    // A managed Postgres database (Neon): durable by construction, and nothing
+    // on the local disk to probe. hostOf() strips the embedded credentials.
+    add("database", "pass", `remote → ${hostOf(env.DATABASE_URL)}`);
   } else if (onServerless) {
-    // The one that silently loses everything: a local-file database on a host
+    // The one that silently loses everything: a local PGlite store on a host
     // whose filesystem is ephemeral and per-instance. Every write is lost on
     // the next cold start, and two instances never see each other's data.
     add(
       "database",
       "fail",
-      "running on a serverless host with a local-file database — writes are ephemeral and per-instance",
-      "provision a Turso database and set VERSO_DATABASE_URL + VERSO_DATABASE_AUTH_TOKEN",
+      "running on a serverless host without DATABASE_URL — a local PGlite store is ephemeral and per-instance",
+      "provision a Neon database and set DATABASE_URL to its postgres:// connection string",
     );
   } else {
-    const dbPath = env.VERSO_DB_PATH ?? "data/verso.db";
+    const dbPath = env.VERSO_PGLITE_PATH ?? "data/pgdata";
     if (!fsProbe.exists(dbPath)) {
       add("database", "fail", `no database at ${dbPath}`, "npm run db:reset && npm run db:seed");
     } else if (!fsProbe.writable(dbPath)) {

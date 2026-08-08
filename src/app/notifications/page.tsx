@@ -10,7 +10,7 @@ export default async function NotificationsPage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const notifications = notificationsFor(user.id, 50);
+  const notifications = await notificationsFor(user.id, 50);
   // Opening the page is the acknowledgement; a separate "mark read" button is
   // a chore nobody performs.
   markNotificationsRead(user.id);

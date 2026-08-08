@@ -25,8 +25,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // libsql is a native addon; the bundler must not try to inline it.
-  serverExternalPackages: ["libsql"],
+  // The database drivers must not be webpack-bundled: PGlite (local/dev) loads
+  // its own WASM + data assets by path at runtime, which the RSC bundler's fs
+  // shim breaks; the Neon driver (serverless/prod) is likewise kept native.
+  serverExternalPackages: ["@electric-sql/pglite", "@neondatabase/serverless"],
   // Without this, Next infers the workspace root by walking up for lockfiles
   // and can land on one in the home directory — which silently changes what
   // file tracing includes in a production build.

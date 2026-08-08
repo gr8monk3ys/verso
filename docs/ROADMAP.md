@@ -55,16 +55,25 @@ when it is least useful. Needs a real transactional sender behind the existing
 `VERSO_MAIL` seam, plus a digest and unsubscribe handling.
 
 ### A shared rate-limit store
-The database moved from `node:sqlite` to `libsql` (2026-08), so Verso now runs
-on a managed Turso database on serverless as readily as on a local file on one
-box — the query layer, the session store and the media seam all made the trip.
-What did **not** is the rate limiter: it is still an in-process fixed window, so
-on serverless the effective limit is the configured value times the number of
+The database moved to Postgres (2026-08) — PGlite in-process on one box,
+managed Neon on serverless — so the query layer, the session store and the
+media seam all run the same on Vercel as on a local box. What did **not** make
+the trip is the rate limiter: it is still an in-process fixed window, so on
+serverless the effective limit is the configured value times the number of
 live instances. Fluid Compute concentrating traffic plus scrypt's per-attempt
 cost make that a real brake at launch scale, but the honest fix is a
-`rate_limits` table on the same libSQL database. It is synchronous work — libSQL
-is synchronous — needing only a global init point, not an async rewrite. The
+`rate_limits` table on the same Postgres database, shared by every instance. The
 per-user write limits on comments, follows and likes share this.
+
+### One-box backups, ported to Postgres
+On serverless this is Neon's job — managed backups and point-in-time restore.
+On one box it is unfinished: `scripts/backup.mjs` / `scripts/restore.mjs` and the
+`ops/verso-backup.*` timer still speak SQLite (`VACUUM INTO`,
+`PRAGMA integrity_check`) and predate the Postgres move. They need porting to a
+`pg_dump` of the PGlite store (or a local Postgres server), keeping the
+checksummed manifest and the restore drill that made the SQLite version worth
+trusting. Until then a one-box deploy has no rehearsed backup path and `data/`
+must be copied offsite by hand — the sightings rebuild from nothing.
 
 ### Abuse and safety, past the basics
 Report, block, a staff moderation queue and per-user write limits on comments,

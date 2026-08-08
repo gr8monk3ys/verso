@@ -22,7 +22,7 @@ export type StaffUser = { id: number; handle: string; display_name: string };
 export async function currentStaff(): Promise<StaffUser | null> {
   const user = await currentUser();
   if (!user) return null;
-  const row = get<{ is_staff: number }>("SELECT is_staff FROM users WHERE id = ?", user.id);
+  const row = await get<{ is_staff: number }>("SELECT is_staff FROM users WHERE id = ?", user.id);
   if (!row?.is_staff) return null;
   return { id: user.id, handle: user.handle, display_name: user.display_name };
 }
@@ -47,10 +47,10 @@ export async function requireStaff(): Promise<StaffUser> {
  */
 let bootstrapped = false;
 
-export function applyStaffBootstrap() {
+export async function applyStaffBootstrap() {
   if (bootstrapped) return;
   bootstrapped = true;
   const handle = process.env.VERSO_STAFF_BOOTSTRAP?.trim().toLowerCase();
   if (!handle) return;
-  run("UPDATE users SET is_staff = 1 WHERE handle = ?", handle);
+  await run("UPDATE users SET is_staff = 1 WHERE handle = ?", handle);
 }

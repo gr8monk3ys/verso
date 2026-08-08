@@ -19,7 +19,7 @@ export default async function QueuePage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const pending = unratedSightings(user.id, 30);
+  const pending = await unratedSightings(user.id, 30);
 
   return (
     <div className="pb-10">

@@ -15,7 +15,7 @@ export default async function RelationPage({
   const { handle, relation } = await params;
   if (relation !== "followers" && relation !== "following") notFound();
 
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile) notFound();
 
   const viewer = await currentUser();
@@ -25,7 +25,18 @@ export default async function RelationPage({
   // they log.
   if (profile.is_private && viewer?.id !== profile.id) notFound();
 
-  const people = relation === "followers" ? followers(profile.id) : following(profile.id);
+  const people = relation === "followers" ? await followers(profile.id) : await following(profile.id);
+  const followingIds = viewer
+    ? new Set(
+        (
+          await Promise.all(
+            people.map(async (person) =>
+              (await isFollowing(viewer.id, person.id)) ? person.id : null,
+            ),
+          )
+        ).filter((id): id is number => id !== null),
+      )
+    : new Set<number>();
 
   return (
     <div className="pb-10">
@@ -54,7 +65,7 @@ export default async function RelationPage({
                   <input type="hidden" name="user_id" value={person.id} />
                   <input type="hidden" name="next" value={`/u/${handle}/${relation}`} />
                   <button className="btn px-3 py-1.5 text-sm">
-                    {isFollowing(viewer.id, person.id) ? "Following" : "Follow"}
+                    {followingIds.has(person.id) ? "Following" : "Follow"}
                   </button>
                 </form>
               )}

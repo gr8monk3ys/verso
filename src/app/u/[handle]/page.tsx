@@ -25,7 +25,7 @@ export default async function ProfilePage({
   params: Promise<{ handle: string }>;
 }) {
   const { handle } = await params;
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile) notFound();
 
   const viewer = await currentUser();
@@ -41,16 +41,16 @@ export default async function ProfilePage({
     );
   }
 
-  const stats = profileStats(profile.id, viewerId);
-  const works = worksSeenByUser(profile.id, { limit: 24, viewerId });
-  const recent = sightingsForUser(profile.id, { limit: 8, viewerId });
-  const lists = listsForUser(profile.id, viewerId).slice(0, 4);
-  const counts = followCounts(profile.id);
-  const followed = viewer ? isFollowing(viewer.id, profile.id) : false;
-  const years = loggedYears(profile.id);
+  const stats = await profileStats(profile.id, viewerId);
+  const works = await worksSeenByUser(profile.id, { limit: 24, viewerId });
+  const recent = await sightingsForUser(profile.id, { limit: 8, viewerId });
+  const lists = (await listsForUser(profile.id, viewerId)).slice(0, 4);
+  const counts = await followCounts(profile.id);
+  const followed = viewer ? await isFollowing(viewer.id, profile.id) : false;
+  const years = await loggedYears(profile.id);
   const path = `/u/${profile.handle}`;
-  const blocked = viewer ? isBlockedEitherWay(db(), viewer.id, profile.id) : false;
-  const favourites = favouritesForUser(profile.id, viewerId);
+  const blocked = viewer ? await isBlockedEitherWay(await db(), viewer.id, profile.id) : false;
+  const favourites = await favouritesForUser(profile.id, viewerId);
 
   return (
     <div className="pb-10">

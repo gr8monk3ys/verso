@@ -16,10 +16,10 @@ export default async function Image({
   params: Promise<{ handle: string; year: string }>;
 }) {
   const { handle, year } = await params;
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile || profile.is_private) return ogCard({ title: "Verso" });
 
-  const data = yearInArt(profile.id, Number(year));
+  const data = await yearInArt(profile.id, Number(year));
   return ogCard({
     eyebrow: `@${profile.handle}`,
     title: `${year} in art`,

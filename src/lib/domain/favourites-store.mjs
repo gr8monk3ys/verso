@@ -29,25 +29,25 @@
 export const MAX_FAVOURITES = 4;
 
 /**
- * @param {import('libsql').Database} db
+ * @param {any} db
  * @param {{userId: number, workId: number}} input
  * @returns {{ok: true, position: number} | {ok: false, reason: 'unseen' | 'full'}}
  *   `unseen` and `full` are both recoverable states the caller must be able to
  *   explain to somebody, which is why this returns a reason instead of throwing.
  */
-export function addFavourite(db, { userId, workId }) {
-  const existing = db
+export async function addFavourite(db, { userId, workId }) {
+  const existing = await db
     .prepare("SELECT position FROM favourites WHERE user_id = ? AND work_id = ?")
     .get(userId, workId);
   // Idempotent: a double-submitted form is not an error, and must not renumber.
   if (existing) return { ok: true, position: existing.position };
 
-  const seen = db
+  const seen = await db
     .prepare("SELECT 1 FROM sightings WHERE user_id = ? AND work_id = ? LIMIT 1")
     .get(userId, workId);
   if (!seen) return { ok: false, reason: "unseen" };
 
-  const { n } = db
+  const { n } = await db
     .prepare("SELECT COUNT(*) AS n FROM favourites WHERE user_id = ?")
     .get(userId);
   // Refuse rather than evict. Silently dropping somebody's oldest favourite to
@@ -55,27 +55,25 @@ export function addFavourite(db, { userId, workId }) {
   if (n >= MAX_FAVOURITES) return { ok: false, reason: "full" };
 
   const position = n + 1;
-  db.prepare("INSERT INTO favourites (user_id, work_id, position) VALUES (?,?,?)").run(
-    userId,
-    workId,
-    position,
-  );
+  await db
+    .prepare("INSERT INTO favourites (user_id, work_id, position) VALUES (?,?,?)")
+    .run(userId, workId, position);
   return { ok: true, position };
 }
 
 /**
  * Remove, then close the gap.
  *
- * @param {import('libsql').Database} db
+ * @param {any} db
  * @param {{userId: number, workId: number}} input
  * @returns {boolean} whether anything was removed
  */
-export function removeFavourite(db, { userId, workId }) {
-  const result = db
+export async function removeFavourite(db, { userId, workId }) {
+  const result = await db
     .prepare("DELETE FROM favourites WHERE user_id = ? AND work_id = ?")
     .run(userId, workId);
   if (!result.changes) return false;
-  renumber(db, userId);
+  await renumber(db, userId);
   return true;
 }
 
@@ -86,37 +84,41 @@ export function removeFavourite(db, { userId, workId }) {
  * favourite leaves a favourite you have not seen — exactly the state rule 1
  * exists to prevent, arrived at through the back door.
  *
- * @param {import('libsql').Database} db
+ * @param {any} db
  * @param {number} userId
  * @returns {number} how many were dropped
  */
-export function pruneUnseenFavourites(db, userId) {
-  const result = db
+export async function pruneUnseenFavourites(db, userId) {
+  const result = await db
     .prepare(
       `DELETE FROM favourites
         WHERE user_id = ?
           AND work_id NOT IN (SELECT work_id FROM sightings WHERE user_id = ?)`,
     )
     .run(userId, userId);
-  if (result.changes) renumber(db, userId);
+  if (result.changes) await renumber(db, userId);
   return Number(result.changes);
 }
 
-/** @returns {number[]} work ids in display order */
-export function favouriteWorkIds(db, userId) {
-  return db
+/** @returns {Promise<number[]>} work ids in display order */
+export async function favouriteWorkIds(db, userId) {
+  const rows = await db
     .prepare("SELECT work_id FROM favourites WHERE user_id = ? ORDER BY position")
-    .all(userId)
-    .map((row) => row.work_id);
+    .all(userId);
+  return rows.map((row) => row.work_id);
 }
 
 /** Rewrite positions to 1..n, preserving the existing order. */
-function renumber(db, userId) {
-  const rows = db
+async function renumber(db, userId) {
+  const rows = await db
     .prepare("SELECT work_id FROM favourites WHERE user_id = ? ORDER BY position, created_at")
     .all(userId);
   const update = db.prepare(
     "UPDATE favourites SET position = ? WHERE user_id = ? AND work_id = ?",
   );
-  rows.forEach((row, index) => update.run(index + 1, userId, row.work_id));
+  // Sequential, not Promise.all: the same connection runs one statement at a
+  // time inside a transaction, and the order is the point.
+  for (const [index, row] of rows.entries()) {
+    await update.run(index + 1, userId, row.work_id);
+  }
 }

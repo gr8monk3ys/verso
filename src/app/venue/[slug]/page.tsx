@@ -25,14 +25,14 @@ export default async function VenuePage({
   const { page: pageParam } = await searchParams;
   const page = Math.max(0, Number(pageParam ?? 0) || 0);
 
-  const venue = venueBySlug(slug);
+  const venue = await venueBySlug(slug);
   if (!venue) notFound();
 
-  const works = onViewAt(venue.id, { limit: 48, offset: page * 48 });
-  const galleries = galleriesAt(venue.id);
-  const topRated = topRatedAtVenue(venue.id);
-  const exhibitions = exhibitionsAt(venue.id);
-  const counts = get<{ on_view: number; sightings: number; crowd: number }>(
+  const works = await onViewAt(venue.id, { limit: 48, offset: page * 48 });
+  const galleries = await galleriesAt(venue.id);
+  const topRated = await topRatedAtVenue(venue.id);
+  const exhibitions = await exhibitionsAt(venue.id);
+  const counts = (await get<{ on_view: number; sightings: number; crowd: number }>(
     `SELECT (SELECT COUNT(*) FROM displays WHERE venue_id = ? AND ended_on IS NULL) AS on_view,
             (SELECT COUNT(*) FROM sightings WHERE venue_id = ?) AS sightings,
             (SELECT COUNT(*) FROM displays WHERE venue_id = ? AND ended_on IS NULL
@@ -40,7 +40,7 @@ export default async function VenuePage({
     venue.id,
     venue.id,
     venue.id,
-  )!;
+  ))!;
 
   return (
     <div className="pb-10">

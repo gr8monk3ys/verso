@@ -11,7 +11,7 @@ export default async function WatchlistPage() {
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
-  const items = watchlistFor(user.id);
+  const items = await watchlistFor(user.id);
   const onView = items.filter((item) => item.on_view);
   const elsewhere = items.filter((item) => !item.on_view);
 

@@ -19,13 +19,14 @@
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import Database from "libsql";
+import { openDatabase } from "../../src/lib/db/driver.mjs";
 
 const SPARQL_ENDPOINT = "https://query.wikidata.org/sparql";
 const USER_AGENT =
   "Verso/0.1 (art-logging catalogue reconciliation; contact: ops@verso.example)";
 const OUT = path.join("data", "seed", "artist-dates.json");
-const DB_PATH = process.env.VERSO_DB_PATH ?? path.join("data", "verso.db");
+const DB_PATH =
+  process.env.DATABASE_URL ?? process.env.VERSO_PGLITE_PATH ?? path.join("data", "pgdata");
 const BATCH = 200;
 const SLEEP_MS = 1200; // WDQS is a shared volunteer resource; go slowly.
 
@@ -81,11 +82,10 @@ async function fetchBatch(qids) {
   return dates;
 }
 
-const db = new Database(DB_PATH);
-const qids = db
-  .prepare("SELECT qid FROM artists WHERE qid IS NOT NULL ORDER BY qid")
-  .all()
-  .map((row) => row.qid);
+const db = await openDatabase(DB_PATH);
+const qids = (
+  await db.prepare("SELECT qid FROM artists WHERE qid IS NOT NULL ORDER BY qid").all()
+).map((row) => row.qid);
 
 if (!qids.length) {
   console.error("no artists with Q-numbers — seed the catalogue first");

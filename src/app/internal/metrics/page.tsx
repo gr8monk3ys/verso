@@ -20,7 +20,7 @@ export default async function MetricsPage({
   await requireStaff();
   const { window: windowParam } = await searchParams;
   const windowDays = Number(windowParam ?? 90) || 90;
-  const metrics = computeMetrics(db(), { windowDays });
+  const metrics = await computeMetrics(await db(), { windowDays });
   const verdict = metrics.verdict;
 
   return (

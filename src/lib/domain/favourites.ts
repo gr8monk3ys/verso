@@ -34,9 +34,9 @@ export type FavouriteWork = {
  * owner the rating comes from public sightings alone. Same split as
  * worksSeenByUser.
  */
-export function favouritesForUser(userId: number, viewerId: number | null = null): FavouriteWork[] {
+export async function favouritesForUser(userId: number, viewerId: number | null = null): Promise<FavouriteWork[]> {
   const privacy = viewerId === userId ? "" : "AND s.is_private = 0";
-  return all<FavouriteWork>(
+  return await all<FavouriteWork>(
     `SELECT f.work_id, f.position, w.slug, w.title, w.artist_display, w.image_url,
             (SELECT s.rating FROM sightings s
               WHERE s.user_id = f.user_id AND s.work_id = f.work_id
@@ -49,20 +49,20 @@ export function favouritesForUser(userId: number, viewerId: number | null = null
   );
 }
 
-export function isFavourite(userId: number, workId: number): boolean {
-  return !!get("SELECT 1 FROM favourites WHERE user_id = ? AND work_id = ?", userId, workId);
+export async function isFavourite(userId: number, workId: number): Promise<boolean> {
+  return !!(await get("SELECT 1 FROM favourites WHERE user_id = ? AND work_id = ?", userId, workId));
 }
 
-export function favouriteCount(userId: number): number {
-  return get<{ n: number }>("SELECT COUNT(*) AS n FROM favourites WHERE user_id = ?", userId)!.n;
+export async function favouriteCount(userId: number): Promise<number> {
+  return (await get<{ n: number }>("SELECT COUNT(*) AS n FROM favourites WHERE user_id = ?", userId))!.n;
 }
 
-export function addFavouriteWork(userId: number, workId: number) {
-  return addFavourite(db(), { userId, workId });
+export async function addFavouriteWork(userId: number, workId: number) {
+  return await addFavourite(await db(), { userId, workId });
 }
 
-export function removeFavouriteWork(userId: number, workId: number) {
-  return removeFavourite(db(), { userId, workId });
+export async function removeFavouriteWork(userId: number, workId: number) {
+  return await removeFavourite(await db(), { userId, workId });
 }
 
 export { favouriteWorkIds };

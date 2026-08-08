@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function InternalIndex() {
   await requireStaff();
-  const venues = activeVenues();
+  const venues = await activeVenues();
 
   return (
     <div className="pb-10">

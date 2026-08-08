@@ -66,7 +66,7 @@ const CARD_SELECT = `
          u.handle, u.display_name,
          (SELECT COUNT(*) FROM likes l WHERE l.sighting_id = s.id) AS like_count,
          (SELECT COUNT(*) FROM comments c WHERE c.sighting_id = s.id) AS comment_count,
-         (SELECT group_concat(t.tag, ',') FROM sighting_tags t WHERE t.sighting_id = s.id) AS tags
+         (SELECT string_agg(t.tag::text, ',') FROM sighting_tags t WHERE t.sighting_id = s.id) AS tags
     FROM sightings s
     JOIN works w ON w.id = s.work_id
     JOIN users u ON u.id = s.user_id
@@ -80,15 +80,15 @@ const CARD_SELECT = `
  * display inference and watchlist notification — lives in sighting-store.mjs
  * so the test suite can exercise it directly against an in-memory database.
  */
-export function createSighting(input: SightingInput): Sighting {
-  return transact(() => store.createSighting(db(), input) as Sighting);
+export async function createSighting(input: SightingInput): Promise<Sighting> {
+  return transact(async (tx) => (await store.createSighting(tx, input)) as Sighting);
 }
 
-export function setTags(sightingId: number, tags: string[]) {
-  store.setTags(db(), sightingId, tags);
+export async function setTags(sightingId: number, tags: string[]) {
+  await store.setTags(await db(), sightingId, tags);
 }
 
-export function updateSighting(
+export async function updateSighting(
   id: number,
   userId: number,
   patch: Partial<
@@ -97,10 +97,10 @@ export function updateSighting(
       "rating" | "review" | "privateNote" | "tags" | "seenOn" | "datePrecision" | "isPrivate"
     >
   >,
-): Sighting | undefined {
+): Promise<Sighting | undefined> {
   // The write itself lives in sighting-store.mjs so the test suite can prove
   // that undefined patch fields preserve what is stored.
-  return store.updateSighting(db(), id, userId, patch) as Sighting | undefined;
+  return (await store.updateSighting(await db(), id, userId, patch)) as Sighting | undefined;
 }
 
 export type SightingPatch = Partial<
@@ -125,10 +125,10 @@ export function sightingPatchFromForm(formData: FormData): SightingPatch {
  * because a private diary must not be readable one enumerable /sighting URL
  * below the closed door on the profile. Null when the sighting doesn't exist.
  */
-export function sightingVisibility(
+export async function sightingVisibility(
   id: number,
-): { ownerId: number; isPrivate: boolean } | null {
-  return store.sightingVisibility(db(), id) as {
+): Promise<{ ownerId: number; isPrivate: boolean } | null> {
+  return (await store.sightingVisibility(await db(), id)) as {
     ownerId: number;
     isPrivate: boolean;
   } | null;
@@ -142,17 +142,17 @@ export function sightingVisibility(
  * what the button says. The unlink is best-effort and after the row: a file that
  * outlives its row is a leak, but a row pointing at a missing file is a 404.
  */
-export function deleteSighting(id: number, userId: number) {
-  const owned = get<{ photo_path: string | null }>(
+export async function deleteSighting(id: number, userId: number) {
+  const owned = await get<{ photo_path: string | null }>(
     "SELECT photo_path FROM sightings WHERE id = ? AND user_id = ?",
     id,
     userId,
   );
   if (!owned) return;
-  run("DELETE FROM sightings WHERE id = ? AND user_id = ?", id, userId);
+  await run("DELETE FROM sightings WHERE id = ? AND user_id = ?", id, userId);
   // A favourite you have no log of is exactly the state the "only what you have
   // seen" rule exists to prevent, reached the long way round.
-  pruneUnseenFavourites(db(), userId);
+  await pruneUnseenFavourites(await db(), userId);
   if (owned.photo_path) void deleteMedia(owned.photo_path);
 }
 
@@ -164,10 +164,10 @@ export function deleteSighting(id: number, userId: number) {
  * leaks permanently. An orphaned file — no row points at it — is visible to
  * nobody, which is what makes deletion meaningful.
  */
-export function photoViewer(
+export async function photoViewer(
   relativePath: string,
-): { ownerId: number; isPrivate: boolean } | null {
-  const row = get<{ user_id: number; is_private: number; owner_private: number }>(
+): Promise<{ ownerId: number; isPrivate: boolean } | null> {
+  const row = await get<{ user_id: number; is_private: number; owner_private: number }>(
     `SELECT s.user_id, s.is_private, u.is_private AS owner_private
        FROM sightings s JOIN users u ON u.id = s.user_id
       WHERE s.photo_path = ?`,
@@ -180,27 +180,27 @@ export function photoViewer(
   };
 }
 
-export function sightingById(id: number): SightingCard | undefined {
+export async function sightingById(id: number): Promise<SightingCard | undefined> {
   return get<SightingCard>(`${CARD_SELECT} WHERE s.id = ?`, id);
 }
 
-export function sightingsForUser(
+export async function sightingsForUser(
   userId: number,
   options: { limit?: number; offset?: number; workId?: number; viewerId?: number | null } = {},
-): SightingCard[] {
+): Promise<SightingCard[]> {
   const { limit = 40, offset = 0, workId, viewerId = null } = options;
   const privacy = viewerId === userId ? "" : "AND s.is_private = 0";
   return all<SightingCard>(
     `${CARD_SELECT}
       WHERE s.user_id = ? ${privacy} ${workId ? "AND s.work_id = ?" : ""}
-      ORDER BY COALESCE(s.seen_on, date(s.created_at)) DESC, s.id DESC
+      ORDER BY COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD')) DESC, s.id DESC
       LIMIT ? OFFSET ?`,
     ...(workId ? [userId, workId, limit, offset] : [userId, limit, offset]),
   );
 }
 
 /** Distinct works a user has logged, most recently seen first. */
-export function worksSeenByUser(
+export async function worksSeenByUser(
   userId: number,
   options: { limit?: number; offset?: number; viewerId?: number | null } = {},
 ) {
@@ -216,14 +216,14 @@ export function worksSeenByUser(
     last_seen: string | null;
     best_rating: number | null;
   }>(
-    `SELECT s.work_id, w.slug, w.title, w.artist_display, w.image_url,
+    `SELECT w.id AS work_id, w.slug, w.title, w.artist_display, w.image_url,
             COUNT(*) AS times_seen,
-            MAX(COALESCE(s.seen_on, date(s.created_at))) AS last_seen,
+            MAX(COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD'))) AS last_seen,
             MAX(s.rating) AS best_rating
        FROM sightings s JOIN works w ON w.id = s.work_id
       WHERE s.user_id = ? ${privacy}
-      GROUP BY s.work_id
-      ORDER BY last_seen DESC, s.id DESC
+      GROUP BY w.id
+      ORDER BY last_seen DESC, MAX(s.id) DESC
       LIMIT ? OFFSET ?`,
     userId,
     limit,
@@ -238,7 +238,7 @@ export function worksSeenByUser(
  * of a Rothko with a queue behind them — so the product has to come back for
  * it later.
  */
-export function unratedSightings(userId: number, limit = 20): SightingCard[] {
+export async function unratedSightings(userId: number, limit = 20): Promise<SightingCard[]> {
   return all<SightingCard>(
     `${CARD_SELECT}
       WHERE s.user_id = ? AND s.rating IS NULL
@@ -249,16 +249,16 @@ export function unratedSightings(userId: number, limit = 20): SightingCard[] {
   );
 }
 
-export function unratedCount(userId: number): number {
-  return get<{ n: number }>(
+export async function unratedCount(userId: number): Promise<number> {
+  return (await get<{ n: number }>(
     `SELECT COUNT(*) AS n FROM sightings
       WHERE user_id = ? AND rating IS NULL AND (review IS NULL OR trim(review) = '')`,
     userId,
-  )!.n;
+  ))!.n;
 }
 
 /** Public reviews for a Work page, most-liked first. */
-export function popularReviews(workId: number, limit = 10): SightingCard[] {
+export async function popularReviews(workId: number, limit = 10): Promise<SightingCard[]> {
   return all<SightingCard>(
     `${CARD_SELECT}
       WHERE s.work_id = ? AND s.review IS NOT NULL AND trim(s.review) <> ''
@@ -269,17 +269,17 @@ export function popularReviews(workId: number, limit = 10): SightingCard[] {
   );
 }
 
-export function recentSightingsForWork(workId: number, limit = 12): SightingCard[] {
+export async function recentSightingsForWork(workId: number, limit = 12): Promise<SightingCard[]> {
   return all<SightingCard>(
     `${CARD_SELECT}
       WHERE s.work_id = ? AND s.is_private = 0
-      ORDER BY COALESCE(s.seen_on, date(s.created_at)) DESC, s.id DESC LIMIT ?`,
+      ORDER BY COALESCE(s.seen_on, to_char(s.created_at::timestamp, 'YYYY-MM-DD')) DESC, s.id DESC LIMIT ?`,
     workId,
     limit,
   );
 }
 
-export function sightingsForExhibition(exhibitionId: number, limit = 30): SightingCard[] {
+export async function sightingsForExhibition(exhibitionId: number, limit = 30): Promise<SightingCard[]> {
   return all<SightingCard>(
     `${CARD_SELECT}
       WHERE s.exhibition_id = ? AND s.is_private = 0
@@ -289,21 +289,21 @@ export function sightingsForExhibition(exhibitionId: number, limit = 30): Sighti
   );
 }
 
-export function userSightingForWork(userId: number, workId: number): Sighting | undefined {
+export async function userSightingForWork(userId: number, workId: number): Promise<Sighting | undefined> {
   return get<Sighting>(
     `SELECT * FROM sightings WHERE user_id = ? AND work_id = ?
-      ORDER BY COALESCE(seen_on, date(created_at)) DESC LIMIT 1`,
+      ORDER BY COALESCE(seen_on, to_char(created_at::timestamp, 'YYYY-MM-DD')) DESC LIMIT 1`,
     userId,
     workId,
   );
 }
 
 /** Works logged today at a venue — the "still here" prompt on the capture screen. */
-export function todayAtVenue(userId: number, venueId: number, on: string) {
-  return all<{ work_id: number }>(
+export async function todayAtVenue(userId: number, venueId: number, on: string) {
+  return (await all<{ work_id: number }>(
     "SELECT work_id FROM sightings WHERE user_id = ? AND venue_id = ? AND seen_on = ?",
     userId,
     venueId,
     on,
-  ).map((row) => row.work_id);
+  )).map((row) => row.work_id);
 }

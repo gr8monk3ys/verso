@@ -8,10 +8,10 @@ export const alt = "A diary on Verso";
 
 export default async function Image({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const profile = userByHandle(handle);
+  const profile = await userByHandle(handle);
   if (!profile || profile.is_private) return ogCard({ title: "Verso" });
 
-  const stats = profileStats(profile.id, null);
+  const stats = await profileStats(profile.id, null);
   return ogCard({
     eyebrow: `@${profile.handle}`,
     title: profile.display_name,

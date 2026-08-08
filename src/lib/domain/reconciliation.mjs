@@ -4,8 +4,11 @@
  * Shared by the CLI (`scripts/ingest/reconcile.mjs --accept 12`) and the review
  * queue at /internal/reconciliation, so a decision made in a terminal and one
  * made in a browser cannot drift apart. Every function takes an open
- * libsql database handle.
+ * database handle.
  */
+
+/** Postgres equivalent of SQLite's datetime('now') — UTC, 'YYYY-MM-DD HH:MM:SS'. */
+const NOW = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')";
 
 /**
  * Accept a candidate: the work gets the Q-number, is marked human-reviewed,
@@ -14,24 +17,24 @@
  * @param {any} db
  * @param {number} candidateId
  */
-export function acceptCandidate(db, candidateId) {
-  const candidate = db
+export async function acceptCandidate(db, candidateId) {
+  const candidate = await db
     .prepare("SELECT * FROM reconciliation_candidates WHERE id = ?")
     .get(candidateId);
   if (!candidate) throw new Error(`no candidate ${candidateId}`);
 
-  db.prepare(
+  await db.prepare(
     `UPDATE works SET wikidata_qid = ?, catalogue_status = 'reviewed',
-                      updated_at = datetime('now')
+                      updated_at = ${NOW}
       WHERE id = ?`,
   ).run(candidate.qid, candidate.work_id);
-  db.prepare(
-    "INSERT OR IGNORE INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', ?)",
+  await db.prepare(
+    "INSERT INTO work_identifiers (work_id, scheme, value) VALUES (?, 'wikidata', ?) ON CONFLICT DO NOTHING",
   ).run(candidate.work_id, candidate.qid);
-  db.prepare("UPDATE reconciliation_candidates SET status = 'accepted' WHERE id = ?").run(
+  await db.prepare("UPDATE reconciliation_candidates SET status = 'accepted' WHERE id = ?").run(
     candidateId,
   );
-  db.prepare(
+  await db.prepare(
     `UPDATE reconciliation_candidates SET status = 'rejected'
       WHERE work_id = ? AND id <> ? AND status = 'pending'`,
   ).run(candidate.work_id, candidateId);
@@ -47,23 +50,23 @@ export function acceptCandidate(db, candidateId) {
  * @param {any} db
  * @param {number} candidateId
  */
-export function rejectCandidate(db, candidateId) {
-  const candidate = db
+export async function rejectCandidate(db, candidateId) {
+  const candidate = await db
     .prepare("SELECT work_id FROM reconciliation_candidates WHERE id = ?")
     .get(candidateId);
   if (!candidate) return;
 
-  db.prepare("UPDATE reconciliation_candidates SET status = 'rejected' WHERE id = ?").run(
+  await db.prepare("UPDATE reconciliation_candidates SET status = 'rejected' WHERE id = ?").run(
     candidateId,
   );
-  const remaining = db
+  const remaining = (await db
     .prepare(
       `SELECT COUNT(*) AS n FROM reconciliation_candidates
         WHERE work_id = ? AND status = 'pending'`,
     )
-    .get(candidate.work_id).n;
+    .get(candidate.work_id)).n;
   if (!remaining) {
-    db.prepare(
+    await db.prepare(
       "UPDATE works SET catalogue_status = 'reviewed' WHERE id = ? AND wikidata_qid IS NULL",
     ).run(candidate.work_id);
   }
@@ -85,24 +88,24 @@ export function rejectCandidate(db, candidateId) {
  *
  * @returns {{flagged: number, qids: string[]}}
  */
-export function flagDuplicateQids(db) {
-  const duplicates = db
+export async function flagDuplicateQids(db) {
+  const duplicates = (await db
     .prepare(
       `SELECT wikidata_qid FROM works
         WHERE wikidata_qid IS NOT NULL
         GROUP BY wikidata_qid HAVING COUNT(*) > 1`,
     )
-    .all()
+    .all())
     .map((row) => row.wikidata_qid);
 
   if (!duplicates.length) return { flagged: 0, qids: [] };
 
   const mark = db.prepare(
-    `UPDATE works SET catalogue_status = 'conflicted', updated_at = datetime('now')
+    `UPDATE works SET catalogue_status = 'conflicted', updated_at = ${NOW}
       WHERE wikidata_qid = ? AND catalogue_status <> 'conflicted'`,
   );
   let flagged = 0;
-  for (const qid of duplicates) flagged += mark.run(qid).changes;
+  for (const qid of duplicates) flagged += (await mark.run(qid)).changes;
   return { flagged, qids: duplicates };
 }
 
@@ -116,8 +119,8 @@ export function flagDuplicateQids(db) {
  * Q-number's inventory was 66.210a–c, which is Samuel Bernard's, not Robert
  * Fulton's.
  */
-export function duplicateQidGroups(db) {
-  const rows = db
+export async function duplicateQidGroups(db) {
+  const rows = await db
     .prepare(
       `SELECT w.wikidata_qid AS qid, w.id, w.slug, w.title, w.artist_display,
               w.date_display, w.catalogue_status,
@@ -150,32 +153,32 @@ export function duplicateQidGroups(db) {
  *
  * @returns {{qid: string, kept: number, detached: number[]}}
  */
-export function resolveQidConflict(db, keepWorkId) {
-  const keeper = db
+export async function resolveQidConflict(db, keepWorkId) {
+  const keeper = await db
     .prepare("SELECT id, wikidata_qid FROM works WHERE id = ?")
     .get(keepWorkId);
   if (!keeper?.wikidata_qid) return { qid: null, kept: keepWorkId, detached: [] };
 
-  const rivals = db
+  const rivals = (await db
     .prepare("SELECT id FROM works WHERE wikidata_qid = ? AND id <> ?")
-    .all(keeper.wikidata_qid, keepWorkId)
+    .all(keeper.wikidata_qid, keepWorkId))
     .map((row) => row.id);
 
   const clear = db.prepare(
     `UPDATE works SET wikidata_qid = NULL, catalogue_status = 'unreconciled',
-                      updated_at = datetime('now')
+                      updated_at = ${NOW}
       WHERE id = ?`,
   );
   const dropIdentifier = db.prepare(
     "DELETE FROM work_identifiers WHERE work_id = ? AND scheme = 'wikidata'",
   );
   for (const id of rivals) {
-    clear.run(id);
-    dropIdentifier.run(id);
+    await clear.run(id);
+    await dropIdentifier.run(id);
   }
 
-  db.prepare(
-    `UPDATE works SET catalogue_status = 'matched', updated_at = datetime('now')
+  await db.prepare(
+    `UPDATE works SET catalogue_status = 'matched', updated_at = ${NOW}
       WHERE id = ?`,
   ).run(keepWorkId);
 

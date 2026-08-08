@@ -24,7 +24,7 @@ export default async function MissingWorkPage({
   if (!user) redirect("/sign-in");
 
   const { venue, done } = await searchParams;
-  const venues = activeVenues();
+  const venues = await activeVenues();
 
   if (done) {
     return (
