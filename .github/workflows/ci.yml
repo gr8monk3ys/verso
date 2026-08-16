@@ -12,9 +12,11 @@ name: CI
 # ---------------------------------------------------------------------------
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
