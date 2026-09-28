@@ -1,6 +1,7 @@
 import "server-only";
 import { all, db, get, run } from "@/lib/db";
 import { hiddenUserIds } from "@/lib/domain/moderation.mjs";
+import { screenAndReport } from "@/lib/domain/screening.mjs";
 import type { SightingCard } from "@/lib/domain/sightings";
 
 /** Postgres equivalent of SQLite's datetime('now') — UTC, 'YYYY-MM-DD HH:MM:SS'. */
@@ -167,7 +168,19 @@ export async function likedByUser(userId: number, sightingIds: number[]): Promis
 export async function addComment(userId: number, sightingId: number, body: string) {
   const text = body.trim().slice(0, 2000);
   if (!text) return;
-  await run("INSERT INTO comments (sighting_id, user_id, body) VALUES (?, ?, ?)", sightingId, userId, text);
+  const created = await get<{ id: number }>(
+    "INSERT INTO comments (sighting_id, user_id, body) VALUES (?, ?, ?) RETURNING id",
+    sightingId,
+    userId,
+    text,
+  );
+  // Best-effort and off unless VERSO_LAYA_URL is set: a confident screen files
+  // a report for a person to look at, and never hides anything.
+  if (created) {
+    await screenAndReport(await db(), { subjectType: "comment", subjectId: created.id, text }).catch(
+      () => null,
+    );
+  }
   const owner = await get<{ user_id: number; work_slug: string }>(
     `SELECT s.user_id, w.slug AS work_slug FROM sightings s
        JOIN works w ON w.id = s.work_id WHERE s.id = ?`,
