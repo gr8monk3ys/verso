@@ -3,6 +3,7 @@ import { all } from "@/lib/db";
 import { requireStaff } from "@/lib/auth/staff";
 import { resolveReportAction, resolveWorkRequestAction } from "./actions";
 import { formatRelative } from "@/lib/format";
+import { AUTOMATED_NOTE_PREFIX } from "@/lib/domain/screening.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,11 @@ export default async function ModerationPage() {
               <p className="mt-1 text-xs text-[var(--color-muted)]">
                 {report.reason}
                 {report.note ? ` — ${report.note}` : ""} · reported by{" "}
-                {report.reporter_handle ? `@${report.reporter_handle}` : "a deleted account"} ·{" "}
+                {report.reporter_handle
+                  ? `@${report.reporter_handle}`
+                  : report.note.startsWith(AUTOMATED_NOTE_PREFIX)
+                    ? "the automated screen"
+                    : "a deleted account"} ·{" "}
                 {formatRelative(report.created_at)}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
