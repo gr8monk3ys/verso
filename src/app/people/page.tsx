@@ -54,7 +54,7 @@ export default async function PeoplePage() {
                     {pluralize(person.overlap, "work")} you&apos;ve both seen
                   </p>
                 </div>
-                <FollowButton userId={person.id} following={suggestionFollows[i]} />
+                <FollowButton userId={person.id} following={suggestionFollows[i] ?? false} />
               </li>
             ))}
           </ul>
@@ -76,7 +76,7 @@ export default async function PeoplePage() {
                   {person.bio ? ` · ${person.bio}` : ""}
                 </p>
               </div>
-              <FollowButton userId={person.id} following={activeFollows[i]} />
+              <FollowButton userId={person.id} following={activeFollows[i] ?? false} />
             </li>
           ))}
         </ul>

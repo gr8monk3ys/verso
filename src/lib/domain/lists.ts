@@ -203,9 +203,12 @@ export async function moveListItem(
   )).map((row) => row.id);
   const index = ordered.indexOf(itemId);
   const target = direction === "up" ? index - 1 : index + 1;
-  if (index === -1 || target < 0 || target >= ordered.length) return;
+  const moving = ordered[index];
+  const displaced = ordered[target];
+  if (moving === undefined || displaced === undefined) return;
 
-  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  ordered[index] = displaced;
+  ordered[target] = moving;
   await reorderList(listId, ordered);
 }
 

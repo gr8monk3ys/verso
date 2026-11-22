@@ -26,7 +26,7 @@ export function formatSeenOn(
   precision: string | null | undefined = "day",
 ): string {
   if (!seenOn) return "undated";
-  const [year, month, day] = seenOn.split("-");
+  const [year = "", month, day] = seenOn.split("-");
   if (precision === "year") return year;
   if (precision === "month") return `${MONTHS[Number(month) - 1]} ${year}`;
   return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
