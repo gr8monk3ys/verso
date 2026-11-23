@@ -28,3 +28,5 @@ data/backups/
 # Playwright MCP writes page snapshots and console logs here during
 # browser verification. Working notes, not artefacts.
 .playwright-mcp/
+test-results/
+playwright-report/

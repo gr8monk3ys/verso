@@ -53,7 +53,7 @@ export default async function ListsPage({
       ) : (
         <ul className="divide-y divide-[var(--color-line)]">
           {lists.map((list, index) => {
-            const preview = previews[index];
+            const preview = previews[index] ?? [];
             return (
               <li key={list.id} className="flex items-start gap-4 py-4">
                 <Link

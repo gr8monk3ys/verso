@@ -64,7 +64,7 @@ export default async function DiaryPage({
           <h2 className="label-caps sticky top-16 z-10 bg-[var(--color-ink)] py-1">
             {day === "undated"
               ? "From memory, undated"
-              : formatSeenOn(day, entries[0].date_precision)}
+              : formatSeenOn(day, entries[0]?.date_precision)}
             <span className="ml-2 normal-case tracking-normal">{entries.length} works</span>
           </h2>
           {entries.map((sighting) => (

@@ -30,8 +30,11 @@
     "eval:catalogue:replay": "node scripts/eval-reconciliation.mjs --arm accession --limit 120 --replay data/eval/reconciliation.json",
     "eval:catalogue:label": "node scripts/eval-reconciliation.mjs --arm label --limit 40",
     "test": "node --test \"tests/*.test.mjs\"",
-    "check": "npm run typecheck && npm test && npm run build",
-    "verify": "npm run check && npm run db:reset && npm run db:seed && npm run db:demo && npm run metrics"
+    "check": "npm run typecheck && npm run depcruise && npm test && npm run build",
+    "verify": "npm run check && npm run db:reset && npm run db:seed && npm run db:demo && npm run metrics",
+    "depcruise": "depcruise src",
+    "test:e2e": "playwright test",
+    "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
@@ -44,10 +47,14 @@
     "zod": "4.6.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "4.1.13",
+    "@total-typescript/ts-reset": "^0.6.1",
     "@types/node": "22.18.1",
     "@types/react": "19.1.13",
     "@types/react-dom": "19.1.9",
+    "dependency-cruiser": "^18.8.0",
+    "simple-git-hooks": "^2.14.0",
     "tailwindcss": "4.1.13",
     "typescript": "5.9.2"
   },
@@ -55,5 +62,8 @@
     "postcss": "^8.5.18",
     "sharp": "^0.35.0",
     "zod": "$zod"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged && npm run typecheck && npm run depcruise"
   }
 }
